@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import axios from "axios";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const API_BASE = "http://127.0.0.1:8000";
+const API_BASE = "https://stockai-ts48.onrender.com";
 
 const PERIODS = [
     { label: "1D", val: "1d" },
