@@ -336,10 +336,10 @@ def get_watchlist(user: str):
 
 # -------------------- ANALYZE --------------------
 @app.get("/analyze")
-def analyze(symbol: str):
+def analyze(symbol: str, period: str = "3mo"):
     try:
         symbol = normalize_symbol(symbol)
-        df = get_stock_data(symbol, "3mo")
+        df = get_stock_data(symbol, period)
 
         if df is None:
             return {"error": "Invalid symbol or no data available"}
