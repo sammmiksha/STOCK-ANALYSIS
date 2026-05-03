@@ -1,13 +1,13 @@
 import yfinance as yf
 import pandas as pd
 import numpy as np
-from fastapi import FastAPI, Query
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI
 from datetime import datetime
 
 # -------------------- APP INIT --------------------
 from fastapi.middleware.cors import CORSMiddleware
 
+app = FastAPI()
 origins = [
     "http://localhost:5173",
     "https://stock-analysis-2f871.web.app",
