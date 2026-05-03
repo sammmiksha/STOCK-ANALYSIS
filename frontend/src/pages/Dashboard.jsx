@@ -72,7 +72,22 @@ export default function Dashboard() {
             setLoading(false);
         }
     };
+    export function formatSymbol(s) {
+        s = s.toUpperCase().trim();
 
+        // If already has exchange → keep it
+        if (s.includes(".")) return s;
+
+        // Known Indian stocks (you can expand this)
+        const indianStocks = ["RELIANCE", "TCS", "INFY", "HDFC", "WIPRO"];
+
+        if (indianStocks.includes(s)) {
+            return s + ".NS";
+        }
+
+        // Otherwise assume global (US)
+        return s;
+    }
 
     const positive = data ? data.signal === "BUY" : true;
     const rsi = parseFloat(data?.summary?.rsi) || 0;
@@ -88,7 +103,7 @@ export default function Dashboard() {
         ? data.symbol.split(".")[0]
         : data?.symbol;
 
-    //const target = formatSymbol(sym || symbol);
+    const target = formatSymbol(sym || symbol);
     return (
         <div style={{ padding: "32px 32px 60px" }}>
             {/* ── Header ── */}
