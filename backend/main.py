@@ -1,13 +1,17 @@
 import yfinance as yf
 import pandas as pd
 import numpy as np
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
+from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
+from functools import lru_cache
+import time
+import os
+import json
 
 # -------------------- APP INIT --------------------
-from fastapi.middleware.cors import CORSMiddleware
-
 app = FastAPI()
+
 origins = [
     "http://localhost:5173",
     "https://stock-analysis-2f871.web.app",
@@ -20,6 +24,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+print("✅ Backend initialized")
 
 
 # -------------------- ROOT --------------------
@@ -36,10 +42,8 @@ def home():
 def get_stock_data(symbol: str, period: str):
     try:
         stock = yf.Ticker(symbol)
-
         df = stock.history(period=period, interval="1d", auto_adjust=True)
 
-        # fallback attempt (shorter period)
         if df.empty:
             df = stock.history(period="5d", interval="1d")
 
@@ -57,11 +61,9 @@ def get_stock_data(symbol: str, period: str):
 def normalize_symbol(symbol: str):
     symbol = symbol.upper().strip()
 
-    # If NSE format
     if symbol.endswith(".NS"):
         return symbol
 
-    # If looks like US stock
     if symbol.isalpha() and len(symbol) <= 5:
         return symbol
 
@@ -72,21 +74,16 @@ def normalize_symbol(symbol: str):
 def calculate_indicators(df: pd.DataFrame):
     df = df.copy()
 
-    # Moving Averages
     df["MA_20"] = df["Close"].rolling(window=20).mean()
     df["MA_50"] = df["Close"].rolling(window=50).mean()
 
-    # EMA
     df["EMA_12"] = df["Close"].ewm(span=12).mean()
     df["EMA_26"] = df["Close"].ewm(span=26).mean()
 
-    # MACD
     df["MACD"] = df["EMA_12"] - df["EMA_26"]
     df["MACD_SIGNAL"] = df["MACD"].ewm(span=9).mean()
 
-    # RSI
     delta = df["Close"].diff()
-
     gain = delta.clip(lower=0)
     loss = -delta.clip(upper=0)
 
@@ -96,7 +93,6 @@ def calculate_indicators(df: pd.DataFrame):
     rs = avg_gain / avg_loss
     df["RSI"] = 100 - (100 / (1 + rs))
 
-    # Volatility
     df["Volatility"] = df["Close"].pct_change().rolling(10).std() * 100
 
     return df
@@ -105,23 +101,12 @@ def calculate_indicators(df: pd.DataFrame):
 # -------------------- SIGNAL ENGINE --------------------
 def generate_signal(df: pd.DataFrame):
     latest = df.iloc[-1]
-    prev = df.iloc[-2] if len(df) > 1 else latest
 
     score = 0
 
-    # EMA Trend
-    if latest["EMA_12"] > latest["EMA_26"]:
-        score += 2
-    else:
-        score -= 2
+    score += 2 if latest["EMA_12"] > latest["EMA_26"] else -2
+    score += 2 if latest["MA_20"] > latest["MA_50"] else -2
 
-    # MA confirmation
-    if latest["MA_20"] > latest["MA_50"]:
-        score += 2
-    else:
-        score -= 2
-
-    # RSI
     if latest["RSI"] < 30:
         score += 2
     elif latest["RSI"] > 70:
@@ -129,17 +114,11 @@ def generate_signal(df: pd.DataFrame):
     else:
         score += 1
 
-    # MACD
-    if latest["MACD"] > latest["MACD_SIGNAL"]:
-        score += 2
-    else:
-        score -= 2
+    score += 2 if latest["MACD"] > latest["MACD_SIGNAL"] else -2
 
-    # Volatility (penalty if too high)
     if latest["Volatility"] > 3:
         score -= 1
 
-    # ---------------- DECISION ----------------
     if score >= 5:
         signal = "BUY"
     elif score <= -5:
@@ -165,13 +144,10 @@ def generate_analysis(df: pd.DataFrame, symbol: str):
     rsi = float(latest["RSI"])
     volatility = float(latest["Volatility"]) if not pd.isna(latest["Volatility"]) else 0
 
-    # Signal engine
     signal, confidence, raw_score = generate_signal(df)
 
-    # Trend
     trend = "Bullish" if latest["EMA_12"] > latest["EMA_26"] else "Bearish"
 
-    # Analysis text
     analysis = f"""
     {trend} structure with signal score {raw_score}.
     RSI at {round(rsi,2)}.
@@ -179,7 +155,6 @@ def generate_analysis(df: pd.DataFrame, symbol: str):
     Daily move {round(change,2)}%.
     """
 
-    # -------------------- CHART DATA --------------------
     history = df.tail(90).reset_index()
 
     history_data = [
@@ -213,32 +188,32 @@ def generate_analysis(df: pd.DataFrame, symbol: str):
     }
 
 
-# -------------------- USER STATS (REALISTIC DERIVED) --------------------
+# -------------------- USER STATS --------------------
 @app.get("/user-stats")
 def user_stats():
-    # Derived from market, not fake random
     indices = ["^NSEI", "^BSESN"]
-
     stats = []
 
     for idx in indices:
-        df = yf.Ticker(idx).history(period="5d")
-        change = (
-            (df["Close"].iloc[-1] - df["Close"].iloc[0]) / df["Close"].iloc[0]
-        ) * 100
-        stats.append(round(change, 2))
+        try:
+            df = yf.Ticker(idx).history(period="5d")
+            if df.empty:
+                continue
+            change = (
+                (df["Close"].iloc[-1] - df["Close"].iloc[0]) / df["Close"].iloc[0]
+            ) * 100
+            stats.append(round(change, 2))
+        except:
+            continue
 
     return {
-        "market_trend_avg": round(sum(stats) / len(stats), 2),
+        "market_trend_avg": round(sum(stats) / len(stats), 2) if stats else 0,
         "active_indices": len(indices),
         "timestamp": str(datetime.now()),
     }
 
 
-from fastapi import Query
-import yfinance as yf
-
-
+# -------------------- SEARCH --------------------
 @app.get("/search")
 def search_stocks(q: str = Query(..., min_length=1)):
     try:
@@ -246,7 +221,6 @@ def search_stocks(q: str = Query(..., min_length=1)):
         quotes = results.get("quotes", [])
 
         suggestions = []
-
         for item in quotes[:10]:
             symbol = item.get("symbol")
             name = item.get("shortname") or item.get("longname")
@@ -259,19 +233,15 @@ def search_stocks(q: str = Query(..., min_length=1)):
 
         return {"results": suggestions}
 
-    except:
+    except Exception as e:
+        print("Search error:", e)
         return {"results": []}
 
 
-from functools import lru_cache
-
-
+# -------------------- CACHE --------------------
 @lru_cache(maxsize=100)
 def fetch_stock_data(symbol):
     return yf.download(symbol, period="1mo")
-
-
-import time
 
 
 def safe_fetch(symbol):
@@ -285,12 +255,35 @@ def safe_fetch(symbol):
     return None
 
 
-reviews = []
+# -------------------- REVIEWS --------------------
+REVIEW_FILE = os.path.join(os.getcwd(), "reviews.json")
+
+
+def load_reviews():
+    if not os.path.exists(REVIEW_FILE):
+        return []
+    try:
+        with open(REVIEW_FILE, "r") as f:
+            return json.load(f)
+    except:
+        return []
+
+
+def save_reviews(data):
+    try:
+        with open(REVIEW_FILE, "w") as f:
+            json.dump(data, f)
+    except:
+        pass
+
+
+reviews = load_reviews()
 
 
 @app.post("/reviews")
 def add_review(review: dict):
     reviews.append(review)
+    save_reviews(reviews)
     return {"status": "ok"}
 
 
@@ -299,6 +292,7 @@ def get_reviews():
     return reviews
 
 
+# -------------------- MARKET --------------------
 @app.get("/market-overview")
 def market_overview():
     indices = {
@@ -311,46 +305,21 @@ def market_overview():
     data = {}
 
     for name, symbol in indices.items():
-        df = yf.Ticker(symbol).history(period="5d")
-
-        change = (
-            (df["Close"].iloc[-1] - df["Close"].iloc[0]) / df["Close"].iloc[0]
-        ) * 100
-
-        data[name] = round(change, 2)
+        try:
+            df = yf.Ticker(symbol).history(period="5d")
+            if df.empty:
+                continue
+            change = (
+                (df["Close"].iloc[-1] - df["Close"].iloc[0]) / df["Close"].iloc[0]
+            ) * 100
+            data[name] = round(change, 2)
+        except:
+            data[name] = 0
 
     return data
 
 
-import json
-
-REVIEW_FILE = "reviews.json"
-
-
-def load_reviews():
-    try:
-        with open(REVIEW_FILE) as f:
-            return json.load(f)
-    except:
-        return []
-
-
-def save_reviews(data):
-    with open(REVIEW_FILE, "w") as f:
-        json.dump(data, f)
-
-
-reviews = load_reviews()
-
-signal_log = []
-
-
-@app.post("/log-signal")
-def log_signal(data: dict):
-    signal_log.append(data)
-    return {"status": "logged"}
-
-
+# -------------------- WATCHLIST --------------------
 watchlists = {}
 
 
@@ -370,17 +339,14 @@ def get_watchlist(user: str):
 def analyze(symbol: str):
     try:
         symbol = normalize_symbol(symbol)
-
         df = get_stock_data(symbol, "3mo")
 
         if df is None:
             return {"error": "Invalid symbol or no data available"}
 
         df = calculate_indicators(df)
-
-        result = generate_analysis(df, symbol)
-
-        return result
+        return generate_analysis(df, symbol)
 
     except Exception as e:
+        print("Analyze error:", e)
         return {"error": str(e)}
