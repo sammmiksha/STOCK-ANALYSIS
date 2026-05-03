@@ -98,6 +98,23 @@ def calculate_indicators(df: pd.DataFrame):
     return df
 
 
+def normalize_symbol(symbol: str):
+    symbol = symbol.upper().strip()
+
+    # Indian stocks
+    indian_stocks = ["RELIANCE", "TCS", "INFY", "WIPRO", "HDFCBANK"]
+
+    if symbol in indian_stocks:
+        return symbol + ".NS"
+
+    # If already has suffix
+    if "." in symbol:
+        return symbol
+
+    # Assume US stock
+    return symbol
+
+
 # -------------------- SIGNAL ENGINE --------------------
 def generate_signal(df: pd.DataFrame):
     latest = df.iloc[-1]
@@ -129,6 +146,26 @@ def generate_signal(df: pd.DataFrame):
     confidence = min(abs(score) * 10, 90)
 
     return signal, confidence, score
+
+
+def get_stock_data(symbol: str, period: str):
+    try:
+        stock = yf.Ticker(symbol)
+        df = stock.history(period=period, interval="1d", auto_adjust=True)
+
+        # Retry with .NS if empty
+        if df.empty:
+            stock = yf.Ticker(symbol + ".NS")
+            df = stock.history(period=period, interval="1d", auto_adjust=True)
+
+        if df.empty:
+            return None
+
+        return df
+
+    except Exception as e:
+        print(f"[ERROR] Fetch failed for {symbol}: {e}")
+        return None
 
 
 # -------------------- ANALYSIS --------------------
