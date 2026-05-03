@@ -11,6 +11,7 @@ app = FastAPI(title="StockAI API", version="1.0")
 origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "https://stock-analysis-2f871.web.app",
 ]
 
 app.add_middleware(
