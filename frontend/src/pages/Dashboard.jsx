@@ -28,7 +28,9 @@ export default function Dashboard() {
         if (s) fetchStock(s);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
-
+    useEffect(() => {
+        fetch("https://stockai-ts48.onrender.com/");
+    }, []);
     // Re-fetch when period changes (only if we already have data)
     useEffect(() => {
         if (data?.symbol) fetchStock(data.symbol);
@@ -38,31 +40,14 @@ export default function Dashboard() {
         const target = (sym || symbol).trim();
         if (!target) return;
 
-        const fetchWithRetry = async (retries = 2) => {
-            for (let i = 0; i <= retries; i++) {
-                try {
-                    const res = await axios.get(
-                        `${ANALYZE_API}?symbol=${target}&period=${period}`,
-                        {
-                            timeout: 20000, // ⬅️ THIS is timeout (20s)
-                        }
-                    );
-                    return res.data;
-                } catch (err) {
-                    if (i === retries) throw err;
-
-                    // wait 2 sec before retry
-                    await new Promise(r => setTimeout(r, 2000));
-                }
-            }
-        };
-
         try {
             setLoading(true);
             setError("");
             setData(null);
 
-            const data = await fetchWithRetry();
+            const data = await fetchWithRetry(
+                `${ANALYZE_API}?symbol=${target}&period=${period}`
+            );
 
             if (!data || data.error) {
                 throw new Error("Invalid symbol or backend issue");
@@ -72,21 +57,22 @@ export default function Dashboard() {
 
         } catch (err) {
             if (err.code === "ECONNABORTED") {
-                setError("Server is waking up... try again");
+                setError("Server is waking up... try again in 30 seconds");
 
+                // retry automatically
                 setTimeout(() => {
                     fetchStock(target);
-                }, 3000);
+                }, 30000);
+
             } else {
-                setError(
-                    err.response?.data?.error ||
-                    "Failed to fetch data"
-                );
+                setError(err.response?.data?.error || "Failed to fetch data");
             }
+
         } finally {
             setLoading(false);
         }
     };
+
 
     const positive = data ? data.signal === "BUY" : true;
     const rsi = parseFloat(data?.summary?.rsi) || 0;
