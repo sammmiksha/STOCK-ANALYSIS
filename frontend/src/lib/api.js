@@ -1,7 +1,7 @@
-const BASE = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+const BASE_URL = "https://stockai-ts48.onrender.com"
 
-export const ANALYZE_API = `${BASE}/analyze`;
-export const SEARCH_API = `${BASE}/search`;
+export const ANALYZE_API = `${BASE_URL}/analyze`
+export const SEARCH_API = `${BASE_URL}/search`
 
 // Map common Indian-market shortcuts
 export function formatSymbol(s) {

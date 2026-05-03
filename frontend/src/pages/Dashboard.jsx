@@ -38,22 +38,51 @@ export default function Dashboard() {
         const target = (sym || symbol).trim();
         if (!target) return;
 
+        const fetchWithRetry = async (retries = 2) => {
+            for (let i = 0; i <= retries; i++) {
+                try {
+                    const res = await axios.get(
+                        `${ANALYZE_API}?symbol=${target}&period=${period}`,
+                        {
+                            timeout: 20000, // ⬅️ THIS is timeout (20s)
+                        }
+                    );
+                    return res.data;
+                } catch (err) {
+                    if (i === retries) throw err;
+
+                    // wait 2 sec before retry
+                    await new Promise(r => setTimeout(r, 2000));
+                }
+            }
+        };
+
         try {
             setLoading(true);
             setError("");
             setData(null);
 
-            const res = await axios.get(
-                `${ANALYZE_API}?symbol=${target}&period=${period}`
-            );
+            const data = await fetchWithRetry();
 
-            setData(res.data);
+            if (!data || data.error) {
+                throw new Error("Invalid symbol or backend issue");
+            }
+
+            setData(data);
 
         } catch (err) {
-            setError(
-                err.response?.data?.error ||
-                "Invalid symbol or backend issue"
-            );
+            if (err.code === "ECONNABORTED") {
+                setError("Server is waking up... try again");
+
+                setTimeout(() => {
+                    fetchStock(target);
+                }, 3000);
+            } else {
+                setError(
+                    err.response?.data?.error ||
+                    "Failed to fetch data"
+                );
+            }
         } finally {
             setLoading(false);
         }
@@ -72,6 +101,7 @@ export default function Dashboard() {
     const displaySymbol = data?.symbol?.includes(".")
         ? data.symbol.split(".")[0]
         : data?.symbol;
+
     //const target = formatSymbol(sym || symbol);
     return (
         <div style={{ padding: "32px 32px 60px" }}>
@@ -125,9 +155,9 @@ export default function Dashboard() {
             {/* ── Error ── */}
             {error && (
                 <div style={{
-                    background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)",
+                    background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.3)",
                     borderRadius: 10, padding: "12px 16px", marginBottom: 20,
-                    color: "#fca5a5", fontSize: 13,
+                    color: "#fbbf24", fontSize: 13,
                 }}>
                     ⚠ {error}
                 </div>
