@@ -12,8 +12,9 @@ StockAI is a full-stack SaaS-style stock analysis platform that provides real-ti
 ## 📸 Preview
 
 ![Home])<img width="1920" height="1020" alt="image" src="https://github.com/user-attachments/assets/489483c2-10df-4bb8-bb2a-49bd7f7e765a" />
-![Dashboard](./assets/dashboard.png)
-![Profile](./assets/profile.png)
+![Dashboard](<img width="1920" height="1020" alt="image" src="https://github.com/user-attachments/assets/319615cb-6b19-4e2e-9957-4b677bea8d73" />)
+![Profile](<img width="1920" height="1020" alt="image" src="https://github.com/user-attachments/assets/43228c54-0020-4fb8-a3b0-079956508998" />
+)
 
 ---
 
