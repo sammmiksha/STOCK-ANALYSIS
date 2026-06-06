@@ -7,6 +7,7 @@ import Dashboard from "./pages/Dashboard";
 import Profile from "./pages/Profile";
 import Navbar from "./components/Navbar";
 import ProtectedRoute from "./components/ProtectedRoute";
+import CookieConsent from "./components/CookieConsent";
 import { AuthProvider } from "./context/AuthContext";
 
 function Layout() {
@@ -26,6 +27,7 @@ function Layout() {
           <ProtectedRoute><Profile /></ProtectedRoute>
         } />
       </Routes>
+      <CookieConsent />
     </>
   );
 }

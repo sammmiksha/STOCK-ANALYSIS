@@ -1,6 +1,6 @@
-/* ── StockAI Global Styles ─────────────────────────────────────────────────── */
+/* ── Stock Analysis Global Styles ─────────────────────────────────────────────────── */
 
-@import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 /* ── CSS Variables ── */
 :root {
@@ -44,7 +44,7 @@ html {
 }
 
 body {
-  font-family: 'Sora', sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
   background: var(--bg-base);
   color: var(--text-primary);
   overflow-x: hidden;
@@ -162,7 +162,7 @@ input:-webkit-autofill {
   color: #030a04;
   padding: 11px 24px;
   border-radius: var(--radius-sm);
-  font-family: 'Sora', sans-serif;
+  font-family: 'Inter', sans-serif;
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
@@ -195,7 +195,7 @@ input:-webkit-autofill {
   color: var(--text-secondary);
   padding: 8px 16px;
   border-radius: var(--radius-sm);
-  font-family: 'Sora', sans-serif;
+  font-family: 'Inter', sans-serif;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -225,7 +225,7 @@ input:-webkit-autofill {
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   color: var(--text-primary);
-  font-family: 'Sora', sans-serif;
+  font-family: 'Inter', sans-serif;
   font-size: 14px;
   outline: none;
   transition: border-color 0.2s, box-shadow 0.2s;

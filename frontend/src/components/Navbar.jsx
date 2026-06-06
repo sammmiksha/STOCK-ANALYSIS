@@ -35,7 +35,7 @@ export default function Navbar() {
         : user?.email?.[0]?.toUpperCase() ?? "U";
 
     return (
-        <nav style={{
+        <nav className="nav-container" style={{
             position: "sticky",
             top: 0,
             zIndex: 100,
@@ -50,6 +50,12 @@ export default function Navbar() {
             padding: "0 24px",
             gap: "16px",
         }}>
+            <style>{`
+                @media (max-width: 480px) {
+                    .nav-logo-text { display: none !important; }
+                    .nav-container { padding: 0 12px !important; gap: 8px !important; }
+                }
+            `}</style>
 
             {/* ── Logo ── */}
             <div
@@ -72,8 +78,8 @@ export default function Navbar() {
                         <polyline points="16 7 22 7 22 13" stroke="#030a04" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                 </div>
-                <span style={{ fontWeight: "800", fontSize: "16px", letterSpacing: "-0.3px" }}>
-                    Stock<span style={{ color: "var(--green)" }}>AI</span>
+                <span className="nav-logo-text" style={{ fontWeight: "800", fontSize: "16px", letterSpacing: "-0.3px" }}>
+                    Stock <span style={{ color: "var(--green)" }}>Analysis</span>
                 </span>
             </div>
 
@@ -149,7 +155,6 @@ export default function Navbar() {
                                 zIndex: 200,
                             }}>
                                 <DropdownItem label="Profile" icon="👤" onClick={() => { navigate("/profile"); setDropdownOpen(false); }} />
-                                <DropdownItem label="Dashboard" icon="📊" onClick={() => { navigate("/dashboard"); setDropdownOpen(false); }} />
                                 <div style={{ height: "1px", background: "var(--border)", margin: "4px 0" }} />
                                 <DropdownItem label="Sign out" icon="↩" onClick={handleSignOut} danger />
                             </div>

@@ -178,19 +178,19 @@ export default function Login() {
     };
 
     return (
-        <div style={{ minHeight: "100vh", background: "#060810", fontFamily: "'Sora', sans-serif", display: "flex", flexDirection: "column", color: "white", overflow: "hidden" }}>
-            <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+        <div style={{ minHeight: "100vh", background: "#060810", fontFamily: "'Inter', sans-serif", display: "flex", flexDirection: "column", color: "white", overflow: "hidden" }}>
+            <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
             <style>{`
         *{box-sizing:border-box;margin:0;padding:0}
         ::placeholder{color:#374151!important}
         input:-webkit-autofill{-webkit-box-shadow:0 0 0 1000px #0d111e inset!important;-webkit-text-fill-color:white!important}
-        .g-btn{width:100%;padding:13px;border-radius:10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:white;font-family:'Sora',sans-serif;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:background .2s,border-color .2s,transform .15s,box-shadow .2s}
+        .g-btn{width:100%;padding:13px;border-radius:10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:white;font-family:'Inter',sans-serif;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:background .2s,border-color .2s,transform .15s,box-shadow .2s}
         .g-btn:hover{background:rgba(255,255,255,0.1);border-color:rgba(255,255,255,0.22);transform:translateY(-1px);box-shadow:0 8px 20px rgba(0,0,0,0.3)}
         .g-btn:active{transform:translateY(0)}
-        .inp{width:100%;padding:13px 16px;border-radius:10px;background:#0d111e;border:1px solid rgba(255,255,255,0.08);color:white;font-family:'Sora',sans-serif;font-size:14px;outline:none;transition:border-color .2s,box-shadow .2s}
+        .inp{width:100%;padding:13px 16px;border-radius:10px;background:#0d111e;border:1px solid rgba(255,255,255,0.08);color:white;font-family:'Inter',sans-serif;font-size:14px;outline:none;transition:border-color .2s,box-shadow .2s}
         .inp:hover{border-color:rgba(255,255,255,0.18)}
         .inp:focus{border-color:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,0.12)}
-        .p-btn{width:100%;padding:14px;border-radius:10px;background:#22c55e;border:none;color:#030a04;font-family:'Sora',sans-serif;font-size:15px;font-weight:700;cursor:pointer;transition:background .2s,transform .15s,box-shadow .2s}
+        .p-btn{width:100%;padding:14px;border-radius:10px;background:#22c55e;border:none;color:#030a04;font-family:'Inter',sans-serif;font-size:15px;font-weight:700;cursor:pointer;transition:background .2s,transform .15s,box-shadow .2s}
         .p-btn:hover{background:#16a34a;transform:translateY(-1px);box-shadow:0 8px 28px rgba(34,197,94,0.35)}
         .p-btn:active{transform:translateY(0)}
         .p-btn:disabled{opacity:.6;cursor:not-allowed;transform:none}
@@ -201,7 +201,7 @@ export default function Login() {
         @keyframes tkr{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
         .tkr{animation:tkr 20s linear infinite;white-space:nowrap;display:flex;gap:0}
         .tkr:hover{animation-play-state:paused}
-        .nav-btn{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#9ca3af;padding:7px 18px;border-radius:8px;cursor:pointer;font-family:'Sora',sans-serif;font-size:13px;font-weight:600;transition:all .2s}
+        .nav-btn{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#9ca3af;padding:7px 18px;border-radius:8px;cursor:pointer;font-family:'Inter',sans-serif;font-size:13px;font-weight:600;transition:all .2s}
         .nav-btn:hover{background:rgba(255,255,255,0.1);color:white}
         a{text-decoration:none}
       `}</style>
@@ -225,7 +225,7 @@ export default function Login() {
                         <span style={{ color: "#030a04", fontWeight: "900", fontSize: "15px" }}>S</span>
                     </div>
                     <span style={{ fontWeight: "800", fontSize: "17px", letterSpacing: "-0.5px" }}>
-                        Stock<span style={{ color: "#22c55e" }}>AI</span>
+                        Stock<span style={{ color: "#22c55e" }}> Analysis</span>
                     </span>
                 </div>
                 <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
@@ -271,7 +271,7 @@ export default function Login() {
                             Welcome back
                         </h1>
                         <p style={{ ...fi(180), color: "#6b7280", fontSize: "14px", marginBottom: "28px", lineHeight: "1.65" }}>
-                            Sign in to your StockAI dashboard — real-time market insights await.
+                            Sign in to your Stock Analysis dashboard — real-time market insights await.
                         </p>
 
                         {/* Google */}

@@ -60,7 +60,7 @@ export default function Login() {
                         Welcome back
                     </h1>
                     <p style={{ color: "var(--text-secondary)", fontSize: 14, marginBottom: 28 }}>
-                        Sign in to access your StockAI dashboard.
+                        Sign in to access your Stock Analysis dashboard.
                     </p>
 
                     <button
@@ -114,7 +114,7 @@ export default function Login() {
                 </div>
 
                 <div style={{ fontSize: 11, color: "var(--text-faint)", textAlign: "center" }}>
-                    © {new Date().getFullYear()} StockAI
+                    © {new Date().getFullYear()} Stock Analysis
                 </div>
             </div>
 

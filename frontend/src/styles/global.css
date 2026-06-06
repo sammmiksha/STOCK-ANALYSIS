@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 :root {
     /* Colors */
@@ -44,7 +44,7 @@ body,
     min-height: 100vh;
     background: var(--bg-base);
     color: var(--text-primary);
-    font-family: 'Sora', system-ui, -apple-system, sans-serif;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
     font-size: 14px;
     -webkit-font-smoothing: antialiased;
 }
