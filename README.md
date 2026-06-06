@@ -11,23 +11,18 @@ Stock Analysis is a full-stack financial analysis platform that delivers real-ti
 ---
 
 ## 📸 Preview
+
 ### Home
-![Home](<img width="1920" height="1020" alt="image" src="https://github.com/user-attachments/assets/8d9b54fc-1b74-44bd-acce-36ec112ff00f" />
-)
+![Home](https://github.com/user-attachments/assets/8d9b54fc-1b74-44bd-acce-36ec112ff00f)
 
 ### Dashboard
-
-![Dashboard](<img width="1920" height="1020" alt="image" src="https://github.com/user-attachments/assets/10baa78b-87ca-429f-b651-bf814ccaccef" />
-)
+![Dashboard](https://github.com/user-attachments/assets/10baa78b-87ca-429f-b651-bf814ccaccef)
 
 ### Analysis View
-
 ![Analysis](https://github.com/user-attachments/assets/489483c2-10df-4bb8-bb2a-49bd7f7e765a)
 
 ### Profile / UI
-
-![Profile](<img width="1920" height="1020" alt="image" src="https://github.com/user-attachments/assets/10f142ec-7e6a-4e17-b127-c502433dea81" />
-)
+![Profile](https://github.com/user-attachments/assets/10f142ec-7e6a-4e17-b127-c502433dea81)
 
 ---
 
@@ -138,7 +133,7 @@ npm run dev
 
 ## 👨‍💻 Author
 
-Sam — BSc IT Student
+Sam — BSc IT Student  
 Focused on AI, ML, and Full-Stack Development
 
 ---
