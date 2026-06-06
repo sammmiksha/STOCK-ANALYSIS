@@ -11,10 +11,14 @@ Stock Analysis is a full-stack financial analysis platform that delivers real-ti
 ---
 
 ## 📸 Preview
+### Home
+![Home](<img width="1920" height="1020" alt="image" src="https://github.com/user-attachments/assets/8d9b54fc-1b74-44bd-acce-36ec112ff00f" />
+)
 
 ### Dashboard
 
-![Dashboard](https://github.com/user-attachments/assets/319615cb-6b19-4e2e-9957-4b677bea8d73)
+![Dashboard](<img width="1920" height="1020" alt="image" src="https://github.com/user-attachments/assets/10baa78b-87ca-429f-b651-bf814ccaccef" />
+)
 
 ### Analysis View
 
@@ -22,7 +26,8 @@ Stock Analysis is a full-stack financial analysis platform that delivers real-ti
 
 ### Profile / UI
 
-![Profile](https://github.com/user-attachments/assets/43228c54-0020-4fb8-a3b0-079956508998)
+![Profile](<img width="1920" height="1020" alt="image" src="https://github.com/user-attachments/assets/10f142ec-7e6a-4e17-b127-c502433dea81" />
+)
 
 ---
 
