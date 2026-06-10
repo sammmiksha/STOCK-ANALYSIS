@@ -667,28 +667,39 @@ export default function Dashboard() {
         }
     };
 
-    // Periodic check for alerts to trigger desktop notifications
+    // WebSocket listener for real-time alerts
     useEffect(() => {
         if (!user?.uid) return;
-        
-        const notifiedKeys = new Set(JSON.parse(sessionStorage.getItem("notified_alerts") || "[]"));
 
-        const pollAlerts = async () => {
-            try {
-                const res = await axios.get(`${API_BASE}/alerts?user=${user.uid}`);
-                const fetchedAlerts = res.data.alerts || [];
-                setAlerts(fetchedAlerts);
-                
-                fetchedAlerts.forEach(alert => {
-                    if (alert.triggered) {
-                        const key = `${alert.symbol}-${alert.buy_price}-${alert.threshold}-${alert.alert_type || "drop"}`;
-                        if (!notifiedKeys.has(key)) {
-                            notifiedKeys.add(key);
-                            sessionStorage.setItem("notified_alerts", JSON.stringify(Array.from(notifiedKeys)));
+        const notifiedKeys = new Set(JSON.parse(sessionStorage.getItem("notified_alerts") || "[]"));
+        
+        const wsUrl = API_BASE.replace(/^http/, "ws") + `/ws/alerts?user=${user.uid}`;
+        let ws;
+        let reconnectTimeout;
+
+        const connect = () => {
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                console.log("WebSocket alerts channel connected.");
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type === "alert_triggered") {
+                        fetchAlerts();
+                        
+                        if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+                            const alert = data.alert;
+                            const isGrowth = alert.alert_type === "growth";
+                            const key = `${alert.symbol}-${alert.buy_price}-${alert.threshold}-${alert.alert_type || "drop"}`;
                             
-                            if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
-                                const isGrowth = alert.alert_type === "growth";
-                                const title = isGrowth ? "📈 TARGET MET" : "🛑 CRITICAL DROP ALERT";
+                            if (!notifiedKeys.has(key)) {
+                                notifiedKeys.add(key);
+                                sessionStorage.setItem("notified_alerts", JSON.stringify(Array.from(notifiedKeys)));
+                                
+                                const title = isGrowth ? "📈 TARGET MET (Live)" : "🛑 CRITICAL DROP ALERT (Live)";
                                 const body = isGrowth
                                     ? `Great news! ${alert.symbol} has risen beyond your growth target of +${alert.threshold}%! Pinned price: ${alert.buy_price}.`
                                     : `Warning! ${alert.symbol} has dropped below your threshold of -${alert.threshold}%! Pinned price: ${alert.buy_price}.`;
@@ -700,16 +711,28 @@ export default function Dashboard() {
                             }
                         }
                     }
-                });
-            } catch (err) {
-                console.error("Error polling alerts:", err);
-            }
+                } catch (err) {
+                    console.error("Error parsing WebSocket message:", err);
+                }
+            };
+
+            ws.onerror = (err) => {
+                console.error("WebSocket error:", err);
+            };
+
+            ws.onclose = () => {
+                console.log("WebSocket disconnected. Retrying in 5s...");
+                reconnectTimeout = setTimeout(connect, 5000);
+            };
         };
 
-        pollAlerts();
-        const intervalId = setInterval(pollAlerts, 30_000);
-        return () => clearInterval(intervalId);
-    }, [user]);
+        connect();
+
+        return () => {
+            if (ws) ws.close();
+            clearTimeout(reconnectTimeout);
+        };
+    }, [user, API_BASE, fetchAlerts]);
 
     const positive = data?.signal === "BUY";
     const rsi = parseFloat(data?.summary?.rsi) || 0;
@@ -1077,16 +1100,92 @@ export default function Dashboard() {
                                 </div>
                                 <SignalBadge signal={data.signal} />
                             </div>
-                            <div style={{ borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: 12, marginTop: 12 }}>
+                             <div style={{ borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: 12, marginTop: 12 }}>
                                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, fontSize: 12 }}>
                                     <span style={{ color: "var(--text-muted)" }}>Confidence</span>
                                     <span style={{ fontWeight: 700, color: confColor }}>{conf}%</span>
                                 </div>
-                                <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 6, height: 6, overflow: "hidden" }}>
+                                <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 6, height: 6, overflow: "hidden", marginBottom: 10 }}>
                                     <div style={{ height: "100%", width: `${conf}%`, background: confColor, borderRadius: 6, transition: "width 0.5s ease" }} />
                                 </div>
+                                
+                                {data.weekly_signal && (
+                                    <div style={{ 
+                                        display: "flex", 
+                                        justifyContent: "space-between", 
+                                        alignItems: "center", 
+                                        background: "rgba(255,255,255,0.02)", 
+                                        border: "1px solid rgba(255,255,255,0.05)",
+                                        borderRadius: 8, 
+                                        padding: "6px 10px", 
+                                        marginTop: 8,
+                                        fontSize: 11
+                                    }}>
+                                        <span style={{ color: "var(--text-muted)" }}>Weekly Trend:</span>
+                                        <span style={{ 
+                                            fontWeight: 700, 
+                                            color: data.weekly_signal === "BUY" ? "var(--green)" : data.weekly_signal === "SELL" ? "var(--red)" : "var(--text-muted)"
+                                        }}>
+                                            {data.weekly_signal}
+                                        </span>
+                                    </div>
+                                )}
                             </div>
                         </div>
+
+                        {/* Position Planner & Target Zones */}
+                        {data.entry_zones && (
+                            <div className="card" style={{ padding: 20 }}>
+                                <h3 style={{ fontSize: 13.5, fontWeight: 800, margin: "0 0 16px 0", fontFamily: "'Inter', sans-serif" }}>
+                                    Target Zones & Position Planner
+                                </h3>
+                                
+                                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                        <span style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Ideal Entry:</span>
+                                        <span style={{ fontSize: 13, fontWeight: 700, fontFamily: "'JetBrains Mono', monospace" }}>
+                                            {priceStr(data.symbol, data.entry_zones.entry)}
+                                        </span>
+                                    </div>
+                                    
+                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                        <span style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Take Profit (Target):</span>
+                                        <span style={{ fontSize: 13, fontWeight: 700, color: "var(--green)", fontFamily: "'JetBrains Mono', monospace" }}>
+                                            {priceStr(data.symbol, data.entry_zones.take_profit)}
+                                        </span>
+                                    </div>
+
+                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                        <span style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Stop Loss:</span>
+                                        <span style={{ fontSize: 13, fontWeight: 700, color: "var(--red)", fontFamily: "'JetBrains Mono', monospace" }}>
+                                            {priceStr(data.symbol, data.entry_zones.stop_loss)}
+                                        </span>
+                                    </div>
+
+                                    <div style={{ borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: 10, marginTop: 4, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                        <span style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Risk/Reward Ratio:</span>
+                                        <span style={{ 
+                                            fontSize: 12, 
+                                            fontWeight: 800, 
+                                            background: data.entry_zones.risk_reward >= 2 ? "rgba(34, 197, 94, 0.12)" : "rgba(239, 68, 68, 0.12)",
+                                            color: data.entry_zones.risk_reward >= 2 ? "#22c55e" : "#ef4444",
+                                            padding: "2px 8px", 
+                                            borderRadius: 6,
+                                            fontFamily: "'JetBrains Mono', monospace"
+                                        }}>
+                                            1 : {data.entry_zones.risk_reward}
+                                        </span>
+                                    </div>
+
+                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 10 }}>
+                                        <span style={{ color: "var(--text-muted)" }}>Volatility (ATR 14):</span>
+                                        <span style={{ color: "var(--text-muted)", fontFamily: "'JetBrains Mono', monospace" }}>
+                                            {priceStr(data.symbol, data.entry_zones.atr)}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
 
                         <button className="export-btn print-hide" onClick={() => window.print()}>
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><rect x="6" y="14" width="12" height="8" /></svg>

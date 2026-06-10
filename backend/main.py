@@ -1,7 +1,7 @@
 import yfinance as yf
 import pandas as pd
 import numpy as np
-from fastapi import FastAPI, Query, Request, HTTPException
+from fastapi import FastAPI, Query, Request, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 import time
@@ -111,7 +111,7 @@ def get_stock_history_raw(symbol: str, period: str, interval: str) -> Optional[p
     try:
         stock = yf.Ticker(symbol)
         df = stock.history(period=period, interval=interval, auto_adjust=True)
-        if df.empty and "." not in symbol:
+        if df.empty and "." not in symbol and "=" not in symbol and "-" not in symbol:
             stock = yf.Ticker(symbol + ".NS")
             df = stock.history(period=period, interval=interval, auto_adjust=True)
         if df.empty:
@@ -177,6 +177,46 @@ def calculate_support_resistance(df: pd.DataFrame):
     support = float(recent["Low"].min())
     resistance = float(recent["High"].max())
     return support, resistance
+
+
+def calculate_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
+    high = df["High"]
+    low = df["Low"]
+    close = df["Close"].shift(1)
+    tr = pd.concat([high - low, (high - close).abs(), (low - close).abs()], axis=1).max(axis=1)
+    return tr.ewm(alpha=1 / period).mean()
+
+
+def calculate_entry_zones(df: pd.DataFrame, signal: str, latest: pd.Series):
+    atr = calculate_atr(df)
+    current_atr = float(atr.iloc[-1])
+    price = float(latest["Close"])
+    support, resistance = calculate_support_resistance(df)
+
+    if signal == "BUY":
+        entry = round(max(support, price - 0.3 * current_atr), 4)
+        stop_loss = round(entry - 1.5 * current_atr, 4)
+        take_profit = round(entry + 3.0 * current_atr, 4)
+    elif signal == "SELL":
+        entry = round(min(resistance, price + 0.3 * current_atr), 4)
+        stop_loss = round(entry + 1.5 * current_atr, 4)
+        take_profit = round(entry - 3.0 * current_atr, 4)
+    else:
+        entry = round(price, 4)
+        stop_loss = round(price - 1.5 * current_atr, 4)
+        take_profit = round(price + 1.5 * current_atr, 4)
+
+    risk = abs(entry - stop_loss)
+    reward = abs(take_profit - entry)
+    rr = round(reward / risk, 2) if risk > 0 else 0
+
+    return {
+        "entry": entry,
+        "stop_loss": stop_loss,
+        "take_profit": take_profit,
+        "risk_reward": rr,
+        "atr": round(current_atr, 4),
+    }
 
 
 def generate_signal(latest: pd.Series):
@@ -484,7 +524,7 @@ watchlists = load_watchlists()
 @app.post("/watchlist/add")
 def add_watchlist(req: WatchlistRequest):
     user_id = req.user.strip()
-    sym = req.symbol.upper().strip()
+    sym = normalize_symbol(req.symbol.upper().strip())
     
     user_symbols = watchlists.setdefault(user_id, [])
     if sym not in user_symbols:
@@ -495,7 +535,7 @@ def add_watchlist(req: WatchlistRequest):
 @app.post("/watchlist/remove")
 def remove_watchlist(req: WatchlistRequest):
     user_id = req.user.strip()
-    sym = req.symbol.upper().strip()
+    sym = normalize_symbol(req.symbol.upper().strip())
     
     user_symbols = watchlists.get(user_id, [])
     if sym in user_symbols:
@@ -546,7 +586,7 @@ alerts = load_alerts()
 @app.post("/alerts/set")
 def set_alert(req: AlertSetRequest):
     user_id = req.user.strip()
-    sym = req.symbol.upper().strip()
+    sym = normalize_symbol(req.symbol.upper().strip())
     atype = req.alert_type.lower().strip() if req.alert_type else "drop"
     if atype not in ["drop", "growth"]:
         atype = "drop"
@@ -569,7 +609,7 @@ def set_alert(req: AlertSetRequest):
 @app.post("/alerts/remove")
 def remove_alert(req: AlertRemoveRequest):
     user_id = req.user.strip()
-    sym = req.symbol.upper().strip()
+    sym = normalize_symbol(req.symbol.upper().strip())
     user_alerts = alerts.get(user_id, [])
     user_alerts = [a for a in user_alerts if a["symbol"] != sym]
     alerts[user_id] = user_alerts
@@ -579,6 +619,73 @@ def remove_alert(req: AlertRemoveRequest):
 @app.get("/alerts")
 def get_alerts(user: str = Query(..., min_length=1)):
     return {"alerts": alerts.get(user.strip(), [])}
+
+
+@app.websocket("/ws/alerts")
+async def websocket_alerts(websocket: WebSocket, user: str = Query(..., min_length=1)):
+    await websocket.accept()
+    notified_keys = set()
+    try:
+        while True:
+            current_alerts = load_alerts()
+            user_alerts = current_alerts.get(user.strip(), [])
+            
+            updated = False
+            for alert in user_alerts:
+                symbol = alert["symbol"]
+                buy_price = float(alert["buy_price"])
+                threshold = float(alert["threshold"])
+                alert_type = alert.get("alert_type", "drop")
+                
+                if alert.get("triggered", False):
+                    key = f"{symbol}-{buy_price}-{threshold}-{alert_type}"
+                    if key not in notified_keys:
+                        notified_keys.add(key)
+                        await websocket.send_json({
+                            "type": "alert_triggered",
+                            "alert": alert
+                        })
+                    continue
+                
+                df = get_stock_history_raw(symbol, period="5d", interval="1d")
+                if df is None or df.empty:
+                    continue
+                current_price = float(df["Close"].iloc[-1])
+                change = ((current_price - buy_price) / buy_price) * 100
+                
+                should_trigger = False
+                if alert_type == "growth":
+                    if change >= threshold:
+                        should_trigger = True
+                else:
+                    if change <= -threshold:
+                        should_trigger = True
+                        
+                if should_trigger:
+                    alert["triggered"] = True
+                    updated = True
+                    pct = abs(change)
+                    direction = "risen" if alert_type == "growth" else "crashed"
+                    action_text = "above target" if alert_type == "growth" else "below purchase price"
+                    
+                    log_alert_notification(alert["email"], symbol, buy_price, current_price, pct, threshold, direction, action_text)
+                    send_actual_email(alert["email"], symbol, buy_price, current_price, pct, threshold, direction, action_text)
+                    
+                    key = f"{symbol}-{buy_price}-{threshold}-{alert_type}"
+                    notified_keys.add(key)
+                    await websocket.send_json({
+                        "type": "alert_triggered",
+                        "alert": alert
+                    })
+                    
+            if updated:
+                save_alerts(current_alerts)
+                
+            await asyncio.sleep(10)
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        print(f"WebSocket error: {e}")
 
 
 # -------------------- ALERTS BACKGROUND CHECKER --------------------
@@ -693,8 +800,22 @@ def analyze(symbol: str, period: str = "3mo", request: Request = None):
         prev = daily_df.iloc[-2] if len(daily_df) > 1 else latest
 
         signal, confidence, raw_score, details = generate_signal(latest)
+
+        # Weekly Timeframe Confirmation Check
+        weekly_df = get_stock_history_raw(symbol, period="1y", interval="1wk")
+        weekly_signal = "HOLD"
+        if weekly_df is not None and not weekly_df.empty:
+            weekly_df = calculate_indicators(weekly_df)
+            w_latest = weekly_df.iloc[-1]
+            weekly_signal, _, _, _ = generate_signal(w_latest)
+
+        # Resolve conflicting trends -> demote to HOLD
+        if signal != weekly_signal and weekly_signal != "HOLD":
+            signal = "HOLD"
+
         analysis_text = generate_narrative_analysis(latest, prev, symbol, raw_score, signal)
         support, resistance = calculate_support_resistance(daily_df)
+        entry_zones = calculate_entry_zones(daily_df, signal, latest)
 
         chart_interval = "1d"
         chart_period = period
@@ -735,7 +856,7 @@ def analyze(symbol: str, period: str = "3mo", request: Request = None):
                 "high": round(float(row["High"]), 2),
                 "low": round(float(row["Low"]), 2),
                 "close": round(float(row["Close"]), 2),
-                "volume": int(row["Volume"]),
+                "volume": int(safe_float(row.get("Volume", 0), 0)),
             })
 
         fifty_two_week_high = float(daily_df["High"].max())
@@ -772,11 +893,13 @@ def analyze(symbol: str, period: str = "3mo", request: Request = None):
                 "open": safe_float(latest["Open"]),
                 "high": safe_float(latest["High"]),
                 "low": safe_float(latest["Low"]),
-                "volume": int(latest["Volume"]),
+                "volume": int(safe_float(latest.get("Volume", 0), 0)),
                 "avg_volume": safe_float(avg_volume),
                 "fifty_two_week_high": safe_float(fifty_two_week_high),
                 "fifty_two_week_low": safe_float(fifty_two_week_low)
             },
+            "weekly_signal": weekly_signal,
+            "entry_zones": entry_zones,
             "analysis": analysis_text,
             "engine_details": details,
             "history": chart_data,
