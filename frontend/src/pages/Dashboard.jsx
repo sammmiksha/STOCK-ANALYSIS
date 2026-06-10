@@ -116,6 +116,93 @@ function priceStr(symbol, price) {
     return isIndian ? `₹${formatted}` : `$${formatted}`;
 }
 
+function calculateFallbackEntryZones(history, signal) {
+    if (!history || history.length < 10) return null;
+    
+    let trs = [];
+    for (let i = 1; i < history.length; i++) {
+        const high = history[i].high;
+        const low = history[i].low;
+        const prevClose = history[i-1].close;
+        const tr = Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose));
+        trs.push(tr);
+    }
+    
+    const period = Math.min(14, trs.length);
+    const lastN = trs.slice(-period);
+    const atr = lastN.reduce((sum, val) => sum + val, 0) / lastN.length;
+    
+    const latest = history[history.length - 1];
+    const price = latest.close;
+    
+    const range = Math.min(30, history.length);
+    const lastRange = history.slice(-range);
+    const support = Math.min(...lastRange.map(d => d.low));
+    const resistance = Math.max(...lastRange.map(d => d.high));
+    
+    let entry, stop_loss, take_profit;
+    if (signal === "BUY") {
+        entry = Math.max(support, price - 0.3 * atr);
+        stop_loss = entry - 1.5 * atr;
+        take_profit = entry + 3.0 * atr;
+    } else if (signal === "SELL") {
+        entry = Math.min(resistance, price + 0.3 * atr);
+        stop_loss = entry + 1.5 * atr;
+        take_profit = entry - 3.0 * atr;
+    } else {
+        entry = price;
+        stop_loss = price - 1.5 * atr;
+        take_profit = price + 1.5 * atr;
+    }
+    
+    const risk = Math.abs(entry - stop_loss);
+    const reward = Math.abs(take_profit - entry);
+    const rr = risk > 0 ? (reward / risk).toFixed(2) : 0;
+    
+    return {
+        entry: parseFloat(entry.toFixed(4)),
+        take_profit: parseFloat(take_profit.toFixed(4)),
+        stop_loss: parseFloat(stop_loss.toFixed(4)),
+        risk_reward: parseFloat(rr),
+        atr: parseFloat(atr.toFixed(4))
+    };
+}
+
+function generateFallbackRealtimePrediction(signal, weeklySignal, intradaySignal) {
+    let action = "NEUTRAL";
+    let advice = "No clear directional momentum across timeframes. Market is ranging. Wait for breakout confirmation.";
+    
+    const dSig = signal || "HOLD";
+    const iSig = intradaySignal || "HOLD";
+    
+    if (dSig === "BUY" && iSig === "BUY") {
+        action = "STRONG BUY";
+        advice = "Bullish momentum is aligned on both daily trend and short-term intraday charts. Ideal entry is active.";
+    } else if (dSig === "BUY" && iSig === "SELL") {
+        action = "BUY ON DIP";
+        advice = "Daily trend is bullish, but short-term intraday momentum indicates a pullback. Wait for intraday consolidation or a bullish trigger.";
+    } else if (dSig === "SELL" && iSig === "SELL") {
+        action = "STRONG SELL";
+        advice = "Bearish pressure dominates on both daily trend and short-term intraday charts. Avoid buying.";
+    } else if (dSig === "SELL" && iSig === "BUY") {
+        action = "SHORT-TERM RALLY";
+        advice = "Daily trend is bearish, but short-term intraday buying is pushing prices up. High risk counter-trend rally.";
+    } else if (dSig === "BUY" && iSig === "HOLD") {
+        action = "BUY / WAIT";
+        advice = "Daily trend is bullish, but intraday charts show consolidation. Monitor for a short-term breakout.";
+    } else if (dSig === "SELL" && iSig === "HOLD") {
+        action = "SELL / WAIT";
+        advice = "Daily trend is bearish, intraday is ranging. Momentum favors selling on resistance tests.";
+    }
+    
+    return {
+        action,
+        advice,
+        intraday_signal: iSig,
+        intraday_confidence: 45
+    };
+}
+
 function SignalBadge({ signal }) {
     const map = {
         BUY: { bg: "rgba(34,197,94,0.1)", border: "rgba(34,197,94,0.3)", color: "#22c55e", icon: "▲", glow: "0 0 16px rgba(34,197,94,0.2)" },
@@ -692,6 +779,17 @@ export default function Dashboard() {
         try {
             const result = await fetchWithRetry(`${API_BASE}/analyze?symbol=${encodeURIComponent(target)}&period=${period}`);
             if (!result || result.error) throw new Error(result?.error || "Invalid symbol or no data available");
+            
+            // Client-side fallbacks for older API backend versions
+            if (result.history) {
+                if (!result.entry_zones) {
+                    result.entry_zones = calculateFallbackEntryZones(result.history, result.signal);
+                }
+                if (!result.realtime_prediction) {
+                    result.realtime_prediction = generateFallbackRealtimePrediction(result.signal, "HOLD", result.signal);
+                }
+            }
+            
             setData(result);
         } catch (err) {
             if (err.code === "ECONNABORTED") {
