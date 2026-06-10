@@ -11,7 +11,8 @@ import {
     Tooltip,
     CartesianGrid,
     Bar,
-    ComposedChart
+    ComposedChart,
+    ReferenceLine
 } from "recharts";
 
 const API_BASE = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
@@ -151,7 +152,7 @@ function MetricItem({ label, value, color }) {
     );
 }
 
-function InteractiveChart({ history, positive, symbol }) {
+function InteractiveChart({ history, positive, symbol, entryZones, realtimePrediction }) {
     if (!history || history.length < 2) {
         return (
             <div style={{ height: 250, display: "flex", alignItems: "center", justifyContent: "center", color: "#4b5563", fontSize: 13 }}>
@@ -210,9 +211,27 @@ function InteractiveChart({ history, positive, symbol }) {
         return null;
     };
 
+    // Calculate execution targets for visual chart lines
+    let buyTarget = null;
+    let sellTarget = null;
+    let stopLoss = null;
+    let isBearish = false;
+
+    if (entryZones) {
+        isBearish = realtimePrediction?.action?.includes("SELL") || false;
+        buyTarget = isBearish ? entryZones.take_profit : entryZones.entry;
+        sellTarget = isBearish ? entryZones.entry : entryZones.take_profit;
+        stopLoss = entryZones.stop_loss;
+    }
+
     const prices = chartData.map(d => d.price);
-    const minPrice = Math.min(...prices) * 0.99;
-    const maxPrice = Math.max(...prices) * 1.01;
+    const allYValues = [...prices];
+    if (buyTarget) allYValues.push(buyTarget);
+    if (sellTarget) allYValues.push(sellTarget);
+    if (stopLoss) allYValues.push(stopLoss);
+
+    const minPrice = Math.min(...allYValues) * 0.995;
+    const maxPrice = Math.max(...allYValues) * 1.005;
     const volumes = chartData.map(d => d.volume);
     const maxVolume = Math.max(...volumes) || 1;
 
@@ -260,6 +279,57 @@ function InteractiveChart({ history, positive, symbol }) {
                         fillOpacity={1} 
                         fill="url(#chartGrad)"
                     />
+                    {buyTarget && (
+                        <ReferenceLine 
+                            yAxisId="price" 
+                            y={buyTarget} 
+                            stroke={isBearish ? "#3b82f6" : "#22c55e"} 
+                            strokeDasharray="3 3" 
+                            strokeWidth={1.5}
+                            label={{ 
+                                value: isBearish ? `Cover: ${buyTarget}` : `Buy: ${buyTarget}`, 
+                                fill: isBearish ? "#3b82f6" : "#22c55e", 
+                                fontSize: 9, 
+                                fontWeight: 700,
+                                position: "insideBottomLeft",
+                                offset: 6
+                            }} 
+                        />
+                    )}
+                    {sellTarget && (
+                        <ReferenceLine 
+                            yAxisId="price" 
+                            y={sellTarget} 
+                            stroke="#ef4444" 
+                            strokeDasharray="3 3" 
+                            strokeWidth={1.5}
+                            label={{ 
+                                value: isBearish ? `Short: ${sellTarget}` : `Sell: ${sellTarget}`, 
+                                fill: "#ef4444", 
+                                fontSize: 9, 
+                                fontWeight: 700,
+                                position: "insideTopLeft",
+                                offset: 6
+                            }} 
+                        />
+                    )}
+                    {stopLoss && (
+                        <ReferenceLine 
+                            yAxisId="price" 
+                            y={stopLoss} 
+                            stroke="#f59e0b" 
+                            strokeDasharray="3 3" 
+                            strokeWidth={1}
+                            label={{ 
+                                value: `SL: ${stopLoss}`, 
+                                fill: "#f59e0b", 
+                                fontSize: 8, 
+                                fontWeight: 600,
+                                position: "insideBottomRight",
+                                offset: 6
+                            }} 
+                        />
+                    )}
                     <Bar 
                         yAxisId="volume"
                         dataKey="volume" 
@@ -1461,7 +1531,13 @@ export default function Dashboard() {
                             </div>
 
                             <div style={{ marginTop: 24, borderTop: "1px solid rgba(255,255,255,0.04)", paddingTop: 18 }}>
-                                <InteractiveChart history={data.history} positive={positive} symbol={data.symbol} />
+                                <InteractiveChart 
+                                    history={data.history} 
+                                    positive={positive} 
+                                    symbol={data.symbol} 
+                                    entryZones={data.entry_zones}
+                                    realtimePrediction={data.realtime_prediction}
+                                />
                             </div>
                         </div>
 
