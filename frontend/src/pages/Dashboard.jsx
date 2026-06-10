@@ -1280,6 +1280,68 @@ export default function Dashboard() {
                                     {data.realtime_prediction.advice}
                                 </p>
                                 
+                                {/* Side-by-side Buy/Sell targets based on current market rate */}
+                                {data.entry_zones && (() => {
+                                    const action = data.realtime_prediction.action;
+                                    const isBearish = action.includes("SELL");
+                                    
+                                    const buyLabel = isBearish ? "🔵 Cover Target" : "🟢 Suggested Buy";
+                                    const sellLabel = isBearish ? "🔴 Short Entry" : "🔴 Suggested Sell";
+                                    
+                                    const buyVal = isBearish ? data.entry_zones.take_profit : data.entry_zones.entry;
+                                    const sellVal = isBearish ? data.entry_zones.entry : data.entry_zones.take_profit;
+                                    
+                                    return (
+                                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20 }}>
+                                            <div style={{
+                                                background: isBearish ? "rgba(59, 130, 246, 0.03)" : "rgba(34, 197, 94, 0.03)",
+                                                border: `1px solid ${isBearish ? "rgba(59, 130, 246, 0.15)" : "rgba(34, 197, 94, 0.15)"}`,
+                                                borderRadius: 12,
+                                                padding: "12px 14px",
+                                                textAlign: "center"
+                                            }}>
+                                                <span style={{ 
+                                                    fontSize: 9.5, 
+                                                    color: isBearish ? "#3b82f6" : "#22c55e", 
+                                                    fontWeight: 700, 
+                                                    textTransform: "uppercase", 
+                                                    letterSpacing: "0.06em", 
+                                                    display: "block", 
+                                                    marginBottom: 4 
+                                                }}>
+                                                    {buyLabel}
+                                                </span>
+                                                <span style={{ fontSize: 18, fontWeight: 800, fontFamily: "'JetBrains Mono', monospace", color: "#f3f4f6" }}>
+                                                    {priceStr(data.symbol, buyVal)}
+                                                </span>
+                                            </div>
+
+                                            <div style={{
+                                                background: "rgba(239, 68, 68, 0.03)",
+                                                border: "1px solid rgba(239, 68, 68, 0.15)",
+                                                borderRadius: 12,
+                                                padding: "12px 14px",
+                                                textAlign: "center"
+                                            }}>
+                                                <span style={{ 
+                                                    fontSize: 9.5, 
+                                                    color: "#ef4444", 
+                                                    fontWeight: 700, 
+                                                    textTransform: "uppercase", 
+                                                    letterSpacing: "0.06em", 
+                                                    display: "block", 
+                                                    marginBottom: 4 
+                                                }}>
+                                                    {sellLabel}
+                                                </span>
+                                                <span style={{ fontSize: 18, fontWeight: 800, fontFamily: "'JetBrains Mono', monospace", color: "#f3f4f6" }}>
+                                                    {priceStr(data.symbol, sellVal)}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+                                
                                 <div style={{ 
                                     display: "grid", 
                                     gridTemplateColumns: "repeat(3, 1fr)", 
