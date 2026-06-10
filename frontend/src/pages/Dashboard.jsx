@@ -513,6 +513,10 @@ export default function Dashboard() {
     const [alertThreshold, setAlertThreshold] = useState("5.0");
     const [alertEmail, setAlertEmail] = useState(user?.email || "");
     const [alertSaving, setAlertSaving] = useState(false);
+    const [alertType, setAlertType] = useState("drop");
+    const [desktopNotificationsEnabled, setDesktopNotificationsEnabled] = useState(
+        typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted"
+    );
 
     const fetchWatchlist = useCallback(async () => {
         if (!user?.uid) return;
@@ -583,7 +587,8 @@ export default function Dashboard() {
                 symbol: data.symbol,
                 buy_price: parseFloat(alertBuyPrice),
                 threshold: parseFloat(alertThreshold),
-                email: alertEmail
+                email: alertEmail,
+                alert_type: alertType
             });
             setAlerts(res.data.alerts || []);
         } catch (err) {
@@ -646,6 +651,65 @@ export default function Dashboard() {
     }, [data]);
 
     useEffect(() => { fetch(`${API_BASE}/`).catch(() => { }); }, []);
+
+    const toggleNotifications = async () => {
+        if (!("Notification" in window)) {
+            alert("This browser does not support desktop notifications.");
+            return;
+        }
+        if (Notification.permission === "default") {
+            const res = await Notification.requestPermission();
+            setDesktopNotificationsEnabled(res === "granted");
+        } else if (Notification.permission === "granted") {
+            setDesktopNotificationsEnabled(true);
+        } else {
+            alert("Notification permission has been blocked by your browser settings. Please reset permission in browser site settings.");
+        }
+    };
+
+    // Periodic check for alerts to trigger desktop notifications
+    useEffect(() => {
+        if (!user?.uid) return;
+        
+        const notifiedKeys = new Set(JSON.parse(sessionStorage.getItem("notified_alerts") || "[]"));
+
+        const pollAlerts = async () => {
+            try {
+                const res = await axios.get(`${API_BASE}/alerts?user=${user.uid}`);
+                const fetchedAlerts = res.data.alerts || [];
+                setAlerts(fetchedAlerts);
+                
+                fetchedAlerts.forEach(alert => {
+                    if (alert.triggered) {
+                        const key = `${alert.symbol}-${alert.buy_price}-${alert.threshold}-${alert.alert_type || "drop"}`;
+                        if (!notifiedKeys.has(key)) {
+                            notifiedKeys.add(key);
+                            sessionStorage.setItem("notified_alerts", JSON.stringify(Array.from(notifiedKeys)));
+                            
+                            if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+                                const isGrowth = alert.alert_type === "growth";
+                                const title = isGrowth ? "📈 TARGET MET" : "🛑 CRITICAL DROP ALERT";
+                                const body = isGrowth
+                                    ? `Great news! ${alert.symbol} has risen beyond your growth target of +${alert.threshold}%! Pinned price: ${alert.buy_price}.`
+                                    : `Warning! ${alert.symbol} has dropped below your threshold of -${alert.threshold}%! Pinned price: ${alert.buy_price}.`;
+                                
+                                new Notification(title, {
+                                    body: body,
+                                    icon: "/favicon.svg"
+                                });
+                            }
+                        }
+                    }
+                });
+            } catch (err) {
+                console.error("Error polling alerts:", err);
+            }
+        };
+
+        pollAlerts();
+        const intervalId = setInterval(pollAlerts, 30_000);
+        return () => clearInterval(intervalId);
+    }, [user]);
 
     const positive = data?.signal === "BUY";
     const rsi = parseFloat(data?.summary?.rsi) || 0;
@@ -875,15 +939,49 @@ export default function Dashboard() {
                         <div className="card print-hide" style={{ padding: 20 }}>
                             <h3 style={{ fontSize: 13.5, fontWeight: 800, margin: "0 0 12px 0", fontFamily: "'Inter', sans-serif" }}>Portfolio Pin Alert</h3>
                             
+                            {/* Desktop Notifications Toggle */}
+                            <div style={{ 
+                                display: "flex", 
+                                justifyContent: "space-between", 
+                                alignItems: "center", 
+                                background: "rgba(255,255,255,0.015)", 
+                                border: "1px solid rgba(255,255,255,0.05)", 
+                                borderRadius: 8, 
+                                padding: "8px 10px", 
+                                marginBottom: 12,
+                                fontSize: 11.5
+                            }}>
+                                <span style={{ color: "var(--text-muted)" }}>Desktop Alerts:</span>
+                                <button 
+                                    onClick={toggleNotifications} 
+                                    style={{
+                                        background: desktopNotificationsEnabled ? "rgba(34,197,94,0.12)" : "rgba(255,255,255,0.04)",
+                                        border: `1px solid ${desktopNotificationsEnabled ? "rgba(34,197,94,0.25)" : "rgba(255,255,255,0.08)"}`,
+                                        color: desktopNotificationsEnabled ? "#22c55e" : "var(--text-muted)",
+                                        padding: "4px 8px",
+                                        borderRadius: 6,
+                                        fontSize: 10.5,
+                                        fontWeight: 700,
+                                        cursor: "pointer",
+                                        transition: "all 0.15s"
+                                    }}
+                                >
+                                    {desktopNotificationsEnabled ? "🔔 ENABLED" : "🔕 DISABLED"}
+                                </button>
+                            </div>
+
                             {(() => {
                                 const activeAlert = alerts.find(a => a.symbol === data.symbol);
                                 if (activeAlert) {
-                                    const triggerVal = activeAlert.buy_price * (1 - activeAlert.threshold / 100);
+                                    const isGrowth = activeAlert.alert_type === "growth";
+                                    const triggerVal = isGrowth 
+                                        ? activeAlert.buy_price * (1 + activeAlert.threshold / 100)
+                                        : activeAlert.buy_price * (1 - activeAlert.threshold / 100);
                                     return (
                                         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                                             <div style={{ 
-                                                background: activeAlert.triggered ? "rgba(239, 68, 68, 0.08)" : "rgba(34, 197, 94, 0.06)",
-                                                border: `1px solid ${activeAlert.triggered ? "rgba(239, 68, 68, 0.18)" : "rgba(34, 197, 94, 0.18)"}`,
+                                                background: activeAlert.triggered ? (isGrowth ? "rgba(34, 197, 94, 0.08)" : "rgba(239, 68, 68, 0.08)") : "rgba(59, 130, 246, 0.06)",
+                                                border: `1px solid ${activeAlert.triggered ? (isGrowth ? "rgba(34, 197, 94, 0.18)" : "rgba(239, 68, 68, 0.18)") : "rgba(59, 130, 246, 0.18)"}`,
                                                 borderRadius: 10,
                                                 padding: "10px 12px",
                                                 fontSize: 11.5
@@ -893,17 +991,19 @@ export default function Dashboard() {
                                                     <span style={{ fontWeight: 700 }}>{priceStr(data.symbol, activeAlert.buy_price)}</span>
                                                 </div>
                                                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                                                    <span style={{ color: "var(--text-muted)" }}>Drop Threshold:</span>
-                                                    <span style={{ fontWeight: 700, color: "var(--red)" }}>-{activeAlert.threshold}%</span>
+                                                    <span style={{ color: "var(--text-muted)" }}>{isGrowth ? "Growth Target:" : "Drop Threshold:"}</span>
+                                                    <span style={{ fontWeight: 700, color: isGrowth ? "var(--green)" : "var(--red)" }}>
+                                                        {isGrowth ? "+" : "-"}{activeAlert.threshold}%
+                                                    </span>
                                                 </div>
                                                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
                                                     <span style={{ color: "var(--text-muted)" }}>Trigger Level:</span>
-                                                    <span style={{ fontWeight: 700, color: "var(--red)" }}>{priceStr(data.symbol, triggerVal)}</span>
+                                                    <span style={{ fontWeight: 700, color: isGrowth ? "var(--green)" : "var(--red)" }}>{priceStr(data.symbol, triggerVal)}</span>
                                                 </div>
                                                 <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: 4, marginTop: 4 }}>
                                                     <span style={{ color: "var(--text-muted)" }}>Status:</span>
-                                                    <span style={{ fontWeight: 800, color: activeAlert.triggered ? "var(--red)" : "var(--green)" }}>
-                                                        {activeAlert.triggered ? "🛑 TRIGGERED (Crashed)" : "🟢 ACTIVE"}
+                                                    <span style={{ fontWeight: 800, color: activeAlert.triggered ? (isGrowth ? "var(--green)" : "var(--red)") : "var(--blue)" }}>
+                                                        {activeAlert.triggered ? (isGrowth ? "🎉 TARGET MET" : "🛑 TRIGGERED (Crashed)") : "🟢 ACTIVE"}
                                                     </span>
                                                 </div>
                                             </div>
@@ -916,6 +1016,18 @@ export default function Dashboard() {
                                     return (
                                         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                                             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                                                <label style={{ fontSize: 9.5, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.02em" }}>Alert Type</label>
+                                                <select 
+                                                    className="inp" 
+                                                    style={{ padding: "8px 10px", fontSize: 12.5, background: "#0c0f1d", color: "#f3f4f6", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8 }} 
+                                                    value={alertType} 
+                                                    onChange={e => setAlertType(e.target.value)}
+                                                >
+                                                    <option value="drop">Drop Warning (Stop Loss)</option>
+                                                    <option value="growth">Growth Target (Take Profit)</option>
+                                                </select>
+                                            </div>
+                                            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                                                 <label style={{ fontSize: 9.5, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.02em" }}>My Purchase Price</label>
                                                 <input 
                                                     className="inp" 
@@ -926,7 +1038,9 @@ export default function Dashboard() {
                                                 />
                                             </div>
                                             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                                                <label style={{ fontSize: 9.5, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.02em" }}>Drop Threshold (%)</label>
+                                                <label style={{ fontSize: 9.5, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.02em" }}>
+                                                    {alertType === "growth" ? "Growth Target (%)" : "Drop Threshold (%)"}
+                                                </label>
                                                 <input 
                                                     className="inp" 
                                                     style={{ padding: "8px 10px", fontSize: 12.5 }} 
@@ -947,7 +1061,7 @@ export default function Dashboard() {
                                                 />
                                             </div>
                                             <button className="btn-primary" onClick={handleSetAlert} disabled={alertSaving || !alertBuyPrice || !alertThreshold || !alertEmail} style={{ padding: "10px 14px", fontSize: 12.5, width: "100%", marginTop: 4 }}>
-                                                Pin Buy Alert Price
+                                                Pin Alert Target
                                             </button>
                                         </div>
                                     );
@@ -1048,6 +1162,67 @@ export default function Dashboard() {
                             <h3 style={{ fontSize: 13.5, fontWeight: 800, margin: "0 0 16px 0", fontFamily: "'Inter', sans-serif" }}>Technical Analysis Grid</h3>
                             <IndicatorsTable summary={data.summary} symbol={data.symbol} />
                         </div>
+
+                        {data.engine_details && (
+                            <div className="card" style={{ padding: "20px 24px" }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                                    <h3 style={{ fontSize: 13.5, fontWeight: 800, margin: 0, fontFamily: "'Inter', sans-serif" }}>Quantitative Diagnostics</h3>
+                                    <span style={{ 
+                                        fontSize: 10, 
+                                        fontWeight: 700, 
+                                        background: data.engine_details.market_state === "Trending" ? "rgba(34, 197, 94, 0.12)" : "rgba(59, 130, 246, 0.12)",
+                                        color: data.engine_details.market_state === "Trending" ? "#22c55e" : "#3b82f6",
+                                        padding: "2px 8px", 
+                                        borderRadius: 12,
+                                        textTransform: "uppercase"
+                                    }}>
+                                        {data.engine_details.market_state} Market
+                                    </span>
+                                </div>
+                                
+                                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 12 }}>
+                                    <div style={{ background: "rgba(255,255,255,0.01)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 10, padding: 12 }}>
+                                        <span style={{ fontSize: 9.5, color: "var(--text-muted)", textTransform: "uppercase", display: "block", marginBottom: 4 }}>Efficiency Ratio</span>
+                                        <span style={{ fontSize: 16, fontWeight: 700, fontFamily: "'JetBrains Mono', monospace", color: "#f3f4f6" }}>
+                                            {(data.engine_details.efficiency_ratio * 100).toFixed(0)}%
+                                        </span>
+                                        <div style={{ width: "100%", height: 3, background: "rgba(255,255,255,0.05)", borderRadius: 2, marginTop: 6, overflow: "hidden" }}>
+                                            <div style={{ width: `${data.engine_details.efficiency_ratio * 100}%`, height: "100%", background: "#22c55e" }} />
+                                        </div>
+                                    </div>
+
+                                    <div style={{ background: "rgba(255,255,255,0.01)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 10, padding: 12 }}>
+                                        <span style={{ fontSize: 9.5, color: "var(--text-muted)", textTransform: "uppercase", display: "block", marginBottom: 4 }}>Trend Score</span>
+                                        <span style={{ fontSize: 16, fontWeight: 700, fontFamily: "'JetBrains Mono', monospace", color: data.engine_details.trend_contribution >= 0 ? "var(--green)" : "var(--red)" }}>
+                                            {data.engine_details.trend_contribution >= 0 ? "+" : ""}{data.engine_details.trend_contribution.toFixed(1)}
+                                        </span>
+                                        <span style={{ fontSize: 8.5, color: "var(--text-muted)", display: "block", marginTop: 4, textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
+                                            {data.engine_details.macd_signal || "Neutral"}
+                                        </span>
+                                    </div>
+
+                                    <div style={{ background: "rgba(255,255,255,0.01)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 10, padding: 12 }}>
+                                        <span style={{ fontSize: 9.5, color: "var(--text-muted)", textTransform: "uppercase", display: "block", marginBottom: 4 }}>Range Reversion</span>
+                                        <span style={{ fontSize: 16, fontWeight: 700, fontFamily: "'JetBrains Mono', monospace", color: data.engine_details.range_contribution >= 0 ? "var(--green)" : "var(--red)" }}>
+                                            {data.engine_details.range_contribution >= 0 ? "+" : ""}{data.engine_details.range_contribution.toFixed(1)}
+                                        </span>
+                                        <span style={{ fontSize: 8.5, color: "var(--text-muted)", display: "block", marginTop: 4, textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
+                                            {data.engine_details.rsi_state || "Neutral"}
+                                        </span>
+                                    </div>
+
+                                    <div style={{ background: "rgba(255,255,255,0.01)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 10, padding: 12 }}>
+                                        <span style={{ fontSize: 9.5, color: "var(--text-muted)", textTransform: "uppercase", display: "block", marginBottom: 4 }}>Volume Conf.</span>
+                                        <span style={{ fontSize: 12, fontWeight: 700, display: "block", margin: "2px 0 4px 0", color: data.engine_details.volume_ratio > 1.2 ? "var(--green)" : data.engine_details.volume_ratio < 0.6 ? "var(--red)" : "#f3f4f6", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
+                                            {data.engine_details.volume_confirm}
+                                        </span>
+                                        <span style={{ fontSize: 8.5, color: "var(--text-muted)", display: "block" }}>
+                                            Ratio: {data.engine_details.volume_ratio ? `${data.engine_details.volume_ratio.toFixed(2)}x` : "N/A"}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
 
                         <div className="card" style={{ 
                             padding: "20px 24px",

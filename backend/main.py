@@ -156,6 +156,17 @@ def calculate_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df["BB_Upper"] = df["BB_Middle"] + 2 * bb_std
     df["BB_Lower"] = df["BB_Middle"] - 2 * bb_std
 
+    # Kaufman's Efficiency Ratio (ER)
+    df["ER_direction"] = (df["Close"] - df["Close"].shift(10)).abs()
+    df["ER_volatility"] = df["Close"].diff().abs().rolling(10).sum()
+    df["ER"] = df["ER_direction"] / df["ER_volatility"].replace(0, 1e-9)
+
+    # Volume Moving Average
+    if "Volume" in df.columns:
+        df["Volume_MA_20"] = df["Volume"].rolling(window=20).mean()
+    else:
+        df["Volume_MA_20"] = 0
+
     return df
 
 
@@ -168,48 +179,115 @@ def calculate_support_resistance(df: pd.DataFrame):
     return support, resistance
 
 
-# -------------------- SIGNAL ENGINE --------------------
 def generate_signal(latest: pd.Series):
-    score = 0
+    score = 0.0
+    details = {}
 
+    er = latest.get("ER", 0.5)
+    if pd.isna(er):
+        er = 0.5
+    
+    is_trending = er > 0.45
+    details["market_state"] = "Trending" if is_trending else "Ranging"
+    details["efficiency_ratio"] = float(er)
+
+    # Trend Crossovers
+    trend_score = 0.0
     if not pd.isna(latest.get("MACD")) and not pd.isna(latest.get("MACD_SIGNAL")):
-        score += 2 if latest["MACD"] > latest["MACD_SIGNAL"] else -2
+        macd_val = 1.5 if latest["MACD"] > latest["MACD_SIGNAL"] else -1.5
+        trend_score += macd_val
+        details["macd_signal"] = "Bullish Crossover" if macd_val > 0 else "Bearish Crossover"
 
     if not pd.isna(latest.get("MA_20")) and not pd.isna(latest.get("MA_50")):
-        score += 2 if latest["MA_20"] > latest["MA_50"] else -2
+        ma_cross = 1.5 if latest["MA_20"] > latest["MA_50"] else -1.5
+        trend_score += ma_cross
+        details["ma_cross"] = "MA20 > MA50" if ma_cross > 0 else "MA20 < MA50"
 
     if not pd.isna(latest.get("MA_200")):
-        score += 2 if latest["Close"] > latest["MA_200"] else -2
+        ma_200_val = 1.0 if latest["Close"] > latest["MA_200"] else -1.0
+        trend_score += ma_200_val
+        details["long_term_trend"] = "Above MA200" if ma_200_val > 0 else "Below MA200"
 
-    rsi = latest.get("RSI", 50)
+    if is_trending:
+        score += trend_score
+        details["trend_contribution"] = float(trend_score)
+    else:
+        score += trend_score * 0.4
+        details["trend_contribution"] = float(trend_score * 0.4)
+
+    # Mean Reversion
+    range_score = 0.0
+    rsi = latest.get("RSI", 50.0)
     if not pd.isna(rsi):
-        if rsi < 30:
-            score += 2
-        elif rsi > 70:
-            score -= 2
+        details["rsi"] = float(rsi)
+        if rsi < 30.0:
+            range_score += 2.5
+            details["rsi_state"] = "Oversold"
+        elif rsi > 70.0:
+            range_score -= 2.5
+            details["rsi_state"] = "Overbought"
         else:
-            score += 1 if rsi > 50 else -1
+            range_score += 0.5 if rsi > 50.0 else -0.5
+            details["rsi_state"] = "Neutral"
 
     close = latest["Close"]
     if not pd.isna(latest.get("BB_Lower")) and not pd.isna(latest.get("BB_Upper")):
         if close <= latest["BB_Lower"]:
-            score += 1
+            range_score += 1.5
+            details["bollinger_state"] = "Lower Band Touch"
         elif close >= latest["BB_Upper"]:
-            score -= 1
+            range_score -= 1.5
+            details["bollinger_state"] = "Upper Band Touch"
+        else:
+            details["bollinger_state"] = "Within Bands"
 
-    vol = latest.get("Volatility", 0)
-    if not pd.isna(vol) and vol > 3:
-        score -= 1
+    if not is_trending:
+        score += range_score
+        details["range_contribution"] = float(range_score)
+    else:
+        score += range_score * 0.5
+        details["range_contribution"] = float(range_score * 0.5)
 
-    if score >= 4:
+    # Volume Confirmation
+    vol = latest.get("Volume", 0)
+    vol_ma = latest.get("Volume_MA_20", 0)
+    vol_confirm = 1.0
+    
+    if not pd.isna(vol) and not pd.isna(vol_ma) and vol_ma > 0:
+        vol_ratio = vol / vol_ma
+        details["volume_ratio"] = float(vol_ratio)
+        if vol_ratio > 1.5:
+            vol_bonus = 1.5 if score >= 0 else -1.5
+            score += vol_bonus
+            details["volume_confirm"] = f"High Vol ({vol_ratio:.1f}x avg)"
+        elif vol_ratio < 0.5:
+            vol_confirm = 0.65
+            details["volume_confirm"] = f"Low Vol ({vol_ratio:.1f}x avg)"
+        else:
+            details["volume_confirm"] = "Normal Vol"
+    else:
+        details["volume_ratio"] = 1.0
+        details["volume_confirm"] = "No Volume"
+
+    # Volatility Penalty
+    volatility = latest.get("Volatility", 0.0)
+    if not pd.isna(volatility) and volatility > 3.5:
+        score -= 1.0
+        details["volatility_warning"] = "High Volatility"
+    else:
+        details["volatility_warning"] = "Normal Volatility"
+
+    if score >= 3.0:
         signal = "BUY"
-    elif score <= -4:
+    elif score <= -3.0:
         signal = "SELL"
     else:
         signal = "HOLD"
 
-    confidence = min(abs(score) * 12.5, 95)
-    return signal, int(confidence), score
+    confidence = min(abs(score) * 15.0 * vol_confirm, 98.0)
+    details["final_score"] = float(score)
+
+    return signal, int(confidence), score, details
 
 
 # -------------------- NARRATIVE ANALYSIS --------------------
@@ -441,6 +519,7 @@ class AlertSetRequest(BaseModel):
     buy_price: float = Field(..., gt=0.0)
     threshold: float = Field(..., ge=0.1, le=99.9)
     email: str = Field(..., min_length=3, max_length=128)
+    alert_type: Optional[str] = "drop"
 
 class AlertRemoveRequest(BaseModel):
     user: str = Field(..., min_length=1, max_length=128)
@@ -468,6 +547,10 @@ alerts = load_alerts()
 def set_alert(req: AlertSetRequest):
     user_id = req.user.strip()
     sym = req.symbol.upper().strip()
+    atype = req.alert_type.lower().strip() if req.alert_type else "drop"
+    if atype not in ["drop", "growth"]:
+        atype = "drop"
+    
     user_alerts = alerts.setdefault(user_id, [])
     user_alerts = [a for a in user_alerts if a["symbol"] != sym]
     user_alerts.append({
@@ -475,6 +558,7 @@ def set_alert(req: AlertSetRequest):
         "buy_price": req.buy_price,
         "threshold": req.threshold,
         "email": html.escape(req.email.strip()),
+        "alert_type": atype,
         "triggered": False,
         "created_at": datetime.now().isoformat()
     })
@@ -498,16 +582,16 @@ def get_alerts(user: str = Query(..., min_length=1)):
 
 
 # -------------------- ALERTS BACKGROUND CHECKER --------------------
-def log_alert_notification(email, symbol, buy_price, current_price, drop_pct, threshold):
+def log_alert_notification(email, symbol, buy_price, current_price, pct, threshold, direction="crashed", action_text="below purchase price"):
     log_msg = f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ALERT: Email notification dispatched to {email}. "
-    log_msg += f"Stock {symbol} has crashed to {current_price:.2f}, representing a drop of {drop_pct:.2f}% below purchase price {buy_price:.2f} (Threshold: {threshold}%).\n"
+    log_msg += f"Stock {symbol} has {direction} to {current_price:.2f}, representing a change of {pct:.2f}% {action_text} {buy_price:.2f} (Threshold: {threshold}%).\n"
     try:
         with open(SENT_ALERTS_LOG, "a") as f:
             f.write(log_msg)
     except Exception as e:
         print(f"Alert logging failed: {e}")
 
-def send_actual_email(email_to, symbol, buy_price, current_price, drop_pct, threshold) -> bool:
+def send_actual_email(email_to, symbol, buy_price, current_price, pct, threshold, direction="crashed", action_text="below purchase price") -> bool:
     smtp_host = os.environ.get("SMTP_HOST")
     smtp_port = os.environ.get("SMTP_PORT")
     smtp_user = os.environ.get("SMTP_USER")
@@ -515,12 +599,12 @@ def send_actual_email(email_to, symbol, buy_price, current_price, drop_pct, thre
     if not all([smtp_host, smtp_port, smtp_user, smtp_password]):
         return False
     try:
-        subject = f"CRITICAL STOCK DROP ALERT: {symbol} down {drop_pct:.1f}%"
+        subject = f"PORTFOLIO ALERT: {symbol} is {direction} {pct:.1f}%"
         body = f"Hello,\n\nStock Analysis alert for pinned stock {symbol}.\n\n"
-        body += f"The asset has dropped beyond your crash warning threshold of {threshold}%.\n"
+        body += f"The asset has moved beyond your warning threshold of {threshold}%.\n"
         body += f"- Pinned Buy Price: {buy_price}\n"
         body += f"- Current Market Price: {current_price:.2f}\n"
-        body += f"- Observed Drop: {drop_pct:.1f}%\n\n"
+        body += f"- Observed Change: {pct:.1f}% ({direction})\n\n"
         body += "Check your portfolio dashboard to review signals.\n\nBest regards,\nStock Analysis Team"
         
         msg = MIMEText(body)
@@ -549,6 +633,7 @@ async def check_alerts_job():
             buy_price = float(alert["buy_price"])
             threshold = float(alert["threshold"])
             email = alert["email"]
+            alert_type = alert.get("alert_type", "drop")
             
             df = get_stock_history_raw(symbol, period="5d", interval="1d")
             if df is None or df.empty:
@@ -556,12 +641,22 @@ async def check_alerts_job():
             current_price = float(df["Close"].iloc[-1])
             change = ((current_price - buy_price) / buy_price) * 100
             
-            if change <= -threshold:
+            should_trigger = False
+            if alert_type == "growth":
+                if change >= threshold:
+                    should_trigger = True
+            else: # "drop"
+                if change <= -threshold:
+                    should_trigger = True
+                    
+            if should_trigger:
                 alert["triggered"] = True
                 updated = True
-                drop_pct = abs(change)
-                log_alert_notification(email, symbol, buy_price, current_price, drop_pct, threshold)
-                send_actual_email(email, symbol, buy_price, current_price, drop_pct, threshold)
+                pct = abs(change)
+                direction = "risen" if alert_type == "growth" else "crashed"
+                action_text = "above target" if alert_type == "growth" else "below purchase price"
+                log_alert_notification(email, symbol, buy_price, current_price, pct, threshold, direction, action_text)
+                send_actual_email(email, symbol, buy_price, current_price, pct, threshold, direction, action_text)
                 
     if updated:
         save_alerts(current_alerts)
@@ -597,7 +692,7 @@ def analyze(symbol: str, period: str = "3mo", request: Request = None):
         latest = daily_df.iloc[-1]
         prev = daily_df.iloc[-2] if len(daily_df) > 1 else latest
 
-        signal, confidence, raw_score = generate_signal(latest)
+        signal, confidence, raw_score, details = generate_signal(latest)
         analysis_text = generate_narrative_analysis(latest, prev, symbol, raw_score, signal)
         support, resistance = calculate_support_resistance(daily_df)
 
@@ -683,6 +778,7 @@ def analyze(symbol: str, period: str = "3mo", request: Request = None):
                 "fifty_two_week_low": safe_float(fifty_two_week_low)
             },
             "analysis": analysis_text,
+            "engine_details": details,
             "history": chart_data,
         }
 
