@@ -1195,6 +1195,167 @@ export default function Dashboard() {
 
                     <div style={{ display: "flex", flexDirection: "column", gap: 16 }} className="right-grid">
                         
+                        {data.realtime_prediction && (
+                            <div className="card" style={{ 
+                                padding: "22px 24px", 
+                                background: "linear-gradient(135deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0.005) 100%)",
+                                border: "1px solid rgba(255,255,255,0.06)",
+                                position: "relative",
+                                overflow: "hidden"
+                            }}>
+                                <div style={{
+                                    position: "absolute",
+                                    top: -40,
+                                    right: -40,
+                                    width: 120,
+                                    height: 120,
+                                    borderRadius: "50%",
+                                    background: data.realtime_prediction.action.includes("BUY") ? "rgba(34, 197, 94, 0.08)" : data.realtime_prediction.action.includes("SELL") ? "rgba(239, 68, 68, 0.08)" : "rgba(245, 158, 11, 0.08)",
+                                    filter: "blur(40px)",
+                                    pointerEvents: "none"
+                                }} />
+                                
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12, marginBottom: 16 }}>
+                                    <div>
+                                        <span style={{ fontSize: 10, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                                            ⚡ Real-Time Trading Advisor
+                                        </span>
+                                        <h3 style={{ fontSize: 18, fontWeight: 800, margin: "6px 0 0 0", letterSpacing: "-0.3px", color: "#f3f4f6" }}>
+                                            Live Execution Status
+                                        </h3>
+                                    </div>
+                                    {(() => {
+                                        const action = data.realtime_prediction.action;
+                                        let bg = "rgba(255,255,255,0.04)";
+                                        let border = "rgba(255,255,255,0.08)";
+                                        let color = "#9ca3af";
+                                        let glow = "none";
+                                        
+                                        if (action === "STRONG BUY") {
+                                            bg = "rgba(34, 197, 94, 0.12)";
+                                            border = "rgba(34, 197, 94, 0.3)";
+                                            color = "#22c55e";
+                                            glow = "0 0 16px rgba(34, 197, 94, 0.25)";
+                                        } else if (action === "BUY ON DIP") {
+                                            bg = "rgba(59, 130, 246, 0.12)";
+                                            border = "rgba(59, 130, 246, 0.3)";
+                                            color = "#3b82f6";
+                                            glow = "0 0 16px rgba(59, 130, 246, 0.25)";
+                                        } else if (action === "STRONG SELL") {
+                                            bg = "rgba(239, 68, 68, 0.12)";
+                                            border = "rgba(239, 68, 68, 0.3)";
+                                            color = "#ef4444";
+                                            glow = "0 0 16px rgba(239, 68, 68, 0.25)";
+                                        } else if (action === "SHORT-TERM RALLY") {
+                                            bg = "rgba(168, 85, 247, 0.12)";
+                                            border = "rgba(168, 85, 247, 0.3)";
+                                            color = "#a855f7";
+                                            glow = "0 0 16px rgba(168, 85, 247, 0.25)";
+                                        } else if (action === "BUY / WAIT" || action === "SELL / WAIT") {
+                                            bg = "rgba(245, 158, 11, 0.1)";
+                                            border = "rgba(245, 158, 11, 0.25)";
+                                            color = "#f59e0b";
+                                            glow = "0 0 12px rgba(245, 158, 11, 0.15)";
+                                        }
+                                        
+                                        return (
+                                            <div style={{
+                                                padding: "6px 14px",
+                                                borderRadius: 8,
+                                                background: bg,
+                                                border: `1px solid ${border}`,
+                                                color: color,
+                                                fontSize: 12.5,
+                                                fontWeight: 800,
+                                                letterSpacing: "0.05em",
+                                                boxShadow: glow
+                                            }}>
+                                                {action}
+                                            </div>
+                                        );
+                                    })()}
+                                </div>
+                                
+                                <p style={{ fontSize: 13, color: "#d1d5db", lineHeight: 1.6, margin: "0 0 20px 0" }}>
+                                    {data.realtime_prediction.advice}
+                                </p>
+                                
+                                <div style={{ 
+                                    display: "grid", 
+                                    gridTemplateColumns: "repeat(3, 1fr)", 
+                                    gap: 10,
+                                    borderTop: "1px solid rgba(255,255,255,0.05)",
+                                    paddingTop: 16
+                                }}>
+                                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                                        <span style={{ fontSize: 9.5, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.02em" }}>Weekly Trend</span>
+                                        <div style={{ 
+                                            padding: "6px 8px", 
+                                            borderRadius: 6,
+                                            background: "rgba(255,255,255,0.015)",
+                                            border: "1px solid rgba(255,255,255,0.04)",
+                                            fontSize: 11.5,
+                                            fontWeight: 700,
+                                            textAlign: "center",
+                                            color: data.weekly_signal === "BUY" ? "#22c55e" : data.weekly_signal === "SELL" ? "#ef4444" : "#f59e0b"
+                                        }}>
+                                            {data.weekly_signal || "NEUTRAL"}
+                                        </div>
+                                    </div>
+                                    
+                                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                                        <span style={{ fontSize: 9.5, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.02em" }}>Daily Signal</span>
+                                        <div style={{ 
+                                            padding: "6px 8px", 
+                                            borderRadius: 6,
+                                            background: "rgba(255,255,255,0.015)",
+                                            border: "1px solid rgba(255,255,255,0.04)",
+                                            fontSize: 11.5,
+                                            fontWeight: 700,
+                                            textAlign: "center",
+                                            color: data.signal === "BUY" ? "#22c55e" : data.signal === "SELL" ? "#ef4444" : "#f59e0b"
+                                        }}>
+                                            {data.signal || "NEUTRAL"}
+                                        </div>
+                                    </div>
+                                    
+                                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                                        <span style={{ fontSize: 9.5, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.02em" }}>Intraday (15m)</span>
+                                        <div style={{ 
+                                            padding: "6px 8px", 
+                                            borderRadius: 6,
+                                            background: "rgba(255,255,255,0.015)",
+                                            border: "1px solid rgba(255,255,255,0.04)",
+                                            fontSize: 11.5,
+                                            fontWeight: 700,
+                                            textAlign: "center",
+                                            color: data.realtime_prediction.intraday_signal === "BUY" ? "#22c55e" : data.realtime_prediction.intraday_signal === "SELL" ? "#ef4444" : "#f59e0b"
+                                        }}>
+                                            {data.realtime_prediction.intraday_signal || "NEUTRAL"}
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 10 }}>
+                                    <span style={{ fontSize: 10, color: "var(--text-muted)", flexShrink: 0 }}>
+                                        Intraday Momentum Strength:
+                                    </span>
+                                    <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 6, height: 4, flex: 1, overflow: "hidden" }}>
+                                        <div style={{ 
+                                            height: "100%", 
+                                            width: `${data.realtime_prediction.intraday_confidence}%`, 
+                                            background: data.realtime_prediction.intraday_signal === "BUY" ? "#22c55e" : data.realtime_prediction.intraday_signal === "SELL" ? "#ef4444" : "#f59e0b",
+                                            borderRadius: 6, 
+                                            transition: "width 0.5s ease" 
+                                        }} />
+                                    </div>
+                                    <span style={{ fontSize: 10, fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, color: "var(--text-secondary)" }}>
+                                        {data.realtime_prediction.intraday_confidence}%
+                                    </span>
+                                </div>
+                            </div>
+                        )}
+                        
                         <div className="card" style={{ padding: "20px 24px" }}>
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 14 }}>
                                 <div>

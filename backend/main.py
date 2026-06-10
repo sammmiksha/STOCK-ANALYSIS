@@ -219,6 +219,36 @@ def calculate_entry_zones(df: pd.DataFrame, signal: str, latest: pd.Series):
     }
 
 
+def generate_realtime_prediction(daily_sig: str, weekly_sig: str, intra_sig: str) -> dict:
+    if daily_sig == "BUY" and intra_sig == "BUY":
+        action = "STRONG BUY"
+        advice = "Bullish momentum is aligned on both daily trend and short-term intraday charts. Ideal entry is active."
+    elif daily_sig == "BUY" and intra_sig == "SELL":
+        action = "BUY ON DIP"
+        advice = "Daily trend is bullish, but short-term intraday momentum indicates a pullback. Wait for intraday consolidation or a bullish trigger."
+    elif daily_sig == "SELL" and intra_sig == "SELL":
+        action = "STRONG SELL"
+        advice = "Bearish pressure dominates on both daily trend and short-term intraday charts. Avoid buying."
+    elif daily_sig == "SELL" and intra_sig == "BUY":
+        action = "SHORT-TERM RALLY"
+        advice = "Daily trend is bearish, but short-term intraday buying is pushing prices up. High risk counter-trend rally."
+    elif daily_sig == "BUY" and intra_sig == "HOLD":
+        action = "BUY / WAIT"
+        advice = "Daily trend is bullish, but intraday charts show consolidation. Monitor for a short-term breakout."
+    elif daily_sig == "SELL" and intra_sig == "HOLD":
+        action = "SELL / WAIT"
+        advice = "Daily trend is bearish, intraday is ranging. Momentum favors selling on resistance tests."
+    else:
+        action = "NEUTRAL"
+        advice = "No clear directional momentum across timeframes. Market is ranging. Wait for breakout confirmation."
+        
+    return {
+        "action": action,
+        "advice": advice,
+        "intraday_signal": intra_sig,
+    }
+
+
 def generate_signal(latest: pd.Series):
     score = 0.0
     details = {}
@@ -813,6 +843,18 @@ def analyze(symbol: str, period: str = "3mo", request: Request = None):
         if signal != weekly_signal and weekly_signal != "HOLD":
             signal = "HOLD"
 
+        # Intraday Timeframe Check
+        intraday_df = get_stock_history_raw(symbol, period="5d", interval="15m")
+        intraday_signal = "HOLD"
+        intraday_confidence = 50
+        if intraday_df is not None and not intraday_df.empty:
+            intraday_df = calculate_indicators(intraday_df)
+            i_latest = intraday_df.iloc[-1]
+            intraday_signal, intraday_confidence, _, _ = generate_signal(i_latest)
+
+        realtime_pred = generate_realtime_prediction(signal, weekly_signal, intraday_signal)
+        realtime_pred["intraday_confidence"] = intraday_confidence
+
         analysis_text = generate_narrative_analysis(latest, prev, symbol, raw_score, signal)
         support, resistance = calculate_support_resistance(daily_df)
         entry_zones = calculate_entry_zones(daily_df, signal, latest)
@@ -903,6 +945,7 @@ def analyze(symbol: str, period: str = "3mo", request: Request = None):
             "analysis": analysis_text,
             "engine_details": details,
             "history": chart_data,
+            "realtime_prediction": realtime_pred,
         }
 
     except Exception as e:
