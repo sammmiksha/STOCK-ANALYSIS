@@ -327,6 +327,13 @@ function FeatureCard({ icon, title, desc }) {
     );
 }
 
+function priceStr(symbol, price) {
+    if (price === undefined || price === null) return "—";
+    const isIndian = symbol?.includes(".NS") || symbol?.includes(".BO");
+    const formatted = parseFloat(price).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return isIndian ? `₹${formatted}` : `$${formatted}`;
+}
+
 export default function Home() {
     const { user } = useAuth();
     const navigate = useNavigate();
@@ -335,6 +342,9 @@ export default function Home() {
     const [reviewsLoading, setReviewsLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
     const [toast, setToast] = useState("");
+    
+    const [heatmapData, setHeatmapData] = useState([]);
+    const [heatmapLoading, setHeatmapLoading] = useState(true);
 
     const fetchReviews = async () => {
         try {
@@ -345,8 +355,23 @@ export default function Home() {
         finally { setReviewsLoading(false); }
     };
 
+    const fetchHeatmap = async () => {
+        try {
+            setHeatmapLoading(true);
+            const res = await fetch(`${API_BASE}/market-heatmap`);
+            const json = await res.json();
+            setHeatmapData(json.data || []);
+        } catch (err) {
+            console.error("Heatmap fetch error:", err);
+            setHeatmapData([]);
+        } finally {
+            setHeatmapLoading(false);
+        }
+    };
+
     useEffect(() => { 
         fetchReviews();
+        fetchHeatmap();
         
         const keyHandler = (e) => {
             if (e.key === "/" && document.activeElement.tagName !== "INPUT" && document.activeElement.tagName !== "TEXTAREA") {
@@ -600,6 +625,115 @@ export default function Home() {
                         </div>
                     )}
                 </div>
+            </section>
+
+            {/* Market Heatmap Treemap */}
+            <section style={{ padding: "10px 24px 50px", maxWidth: 1200, margin: "0 auto" }}>
+                <div style={{ marginBottom: 20, textAlign: "left" }}>
+                    <p style={{ fontSize: 11, fontWeight: 700, color: "#22c55e", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 6 }}>
+                        Live Markets
+                    </p>
+                    <h2 style={{ fontSize: "clamp(22px, 4vw, 28px)", fontWeight: 800, letterSpacing: "-0.5px", fontFamily: "var(--font-inter, 'Inter', sans-serif)", margin: 0 }}>
+                        Market Heatmap (Top Sectors)
+                    </h2>
+                </div>
+                
+                {heatmapLoading ? (
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 16 }}>
+                        {Array.from({ length: 3 }).map((_, idx) => (
+                            <div key={idx} className="skel" style={{ height: 160, borderRadius: 16 }} />
+                        ))}
+                    </div>
+                ) : (
+                    <div style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+                        gap: 16
+                    }}>
+                        {(() => {
+                            const sectors = {};
+                            heatmapData.forEach(item => {
+                                if (!sectors[item.sector]) {
+                                    sectors[item.sector] = [];
+                                }
+                                sectors[item.sector].push(item);
+                            });
+                            
+                            return Object.keys(sectors).map(sector => (
+                                <div key={sector} className="card" style={{ 
+                                    padding: 18, 
+                                    background: "rgba(255,255,255,0.015)", 
+                                    border: "1px solid rgba(255,255,255,0.05)",
+                                    borderRadius: 16
+                                }}>
+                                    <h4 style={{ fontSize: 13, fontWeight: 800, color: "var(--text-muted)", marginBottom: 12, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                                        {sector}
+                                    </h4>
+                                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                                        {sectors[sector].map(item => {
+                                            const isGreen = item.change >= 0;
+                                            const isStrong = Math.abs(item.change) >= 1.5;
+                                            let cellBg = "rgba(107, 114, 128, 0.08)";
+                                            let cellBorder = "rgba(107, 114, 128, 0.2)";
+                                            let textColor = "#9ca3af";
+                                            
+                                            if (isGreen) {
+                                                cellBg = isStrong ? "rgba(34, 197, 94, 0.16)" : "rgba(34, 197, 94, 0.08)";
+                                                cellBorder = isStrong ? "rgba(34, 197, 94, 0.45)" : "rgba(34, 197, 94, 0.2)";
+                                                textColor = "#22c55e";
+                                            } else {
+                                                cellBg = isStrong ? "rgba(239, 68, 68, 0.16)" : "rgba(239, 68, 68, 0.08)";
+                                                cellBorder = isStrong ? "rgba(239, 68, 68, 0.45)" : "rgba(239, 68, 68, 0.2)";
+                                                textColor = "#ef4444";
+                                            }
+                                            
+                                            return (
+                                                <div 
+                                                    key={item.symbol}
+                                                    onClick={() => handleAnalyze(item.symbol)}
+                                                    style={{
+                                                        flex: `1 1 ${item.weight * 65}px`,
+                                                        minWidth: 100,
+                                                        background: cellBg,
+                                                        border: `1px solid ${cellBorder}`,
+                                                        borderRadius: 10,
+                                                        padding: "10px 12px",
+                                                        cursor: "pointer",
+                                                        transition: "all 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
+                                                        display: "flex",
+                                                        flexDirection: "column",
+                                                        justifyContent: "space-between",
+                                                        gap: 4
+                                                    }}
+                                                    onMouseEnter={e => {
+                                                        e.currentTarget.style.transform = "translateY(-2px)";
+                                                        e.currentTarget.style.boxShadow = `0 4px 12px ${isGreen ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.12)"}`;
+                                                    }}
+                                                    onMouseLeave={e => {
+                                                        e.currentTarget.style.transform = "none";
+                                                        e.currentTarget.style.boxShadow = "none";
+                                                    }}
+                                                >
+                                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                                        <span style={{ fontSize: 11, fontWeight: 800, fontFamily: "'JetBrains Mono', monospace", color: "#f3f4f6" }}>
+                                                            {item.symbol.split(".")[0]}
+                                                        </span>
+                                                        <span style={{ fontSize: 9.5, fontWeight: 700, color: textColor }}>
+                                                            {isGreen ? "+" : ""}{item.change.toFixed(2)}%
+                                                        </span>
+                                                    </div>
+                                                    <span style={{ fontSize: 9.5, color: "var(--text-faint)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                                        {priceStr(item.symbol, item.price)}
+                                                    </span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            ));
+                        })()}
+                    </div>
+                )}
             </section>
 
             <section style={{ padding: "60px 24px", maxWidth: 1200, margin: "0 auto" }}>

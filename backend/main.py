@@ -953,3 +953,179 @@ def analyze(symbol: str, period: str = "3mo", request: Request = None):
         return {"error": str(e)}
 
 
+@app.get("/market-heatmap")
+def get_market_heatmap():
+    tickers = [
+        # Technology
+        {"symbol": "AAPL", "name": "Apple", "sector": "Technology", "weight": 3.0},
+        {"symbol": "MSFT", "name": "Microsoft", "sector": "Technology", "weight": 3.0},
+        {"symbol": "NVDA", "name": "Nvidia", "sector": "Technology", "weight": 2.8},
+        {"symbol": "TCS.NS", "name": "TCS", "sector": "Technology", "weight": 1.5},
+        {"symbol": "INFY.NS", "name": "Infosys", "sector": "Technology", "weight": 1.2},
+        # Financials
+        {"symbol": "JPM", "name": "JPMorgan", "sector": "Financials", "weight": 2.2},
+        {"symbol": "BAC", "name": "Bank of America", "sector": "Financials", "weight": 1.5},
+        {"symbol": "HDFCBANK.NS", "name": "HDFC Bank", "sector": "Financials", "weight": 1.6},
+        {"symbol": "ICICIBANK.NS", "name": "ICICI Bank", "sector": "Financials", "weight": 1.4},
+        # Energy
+        {"symbol": "XOM", "name": "ExxonMobil", "sector": "Energy", "weight": 2.0},
+        {"symbol": "CVX", "name": "Chevron", "sector": "Energy", "weight": 1.5},
+        {"symbol": "RELIANCE.NS", "name": "Reliance", "sector": "Energy", "weight": 2.0},
+        # Consumer
+        {"symbol": "WMT", "name": "Walmart", "sector": "Consumer", "weight": 1.8},
+        {"symbol": "KO", "name": "Coca-Cola", "sector": "Consumer", "weight": 1.4},
+        {"symbol": "ITC.NS", "name": "ITC", "sector": "Consumer", "weight": 1.3},
+        {"symbol": "HINDUNILVR.NS", "name": "Hindustan Unilever", "sector": "Consumer", "weight": 1.3},
+        # Healthcare
+        {"symbol": "JNJ", "name": "Johnson & Johnson", "sector": "Healthcare", "weight": 1.9},
+        {"symbol": "SUNPHARMA.NS", "name": "Sun Pharma", "sector": "Healthcare", "weight": 1.0}
+    ]
+    
+    symbols_list = [t["symbol"] for t in tickers]
+    
+    try:
+        data = yf.download(symbols_list, period="5d", interval="1d", auto_adjust=True, group_by="ticker")
+        
+        heatmap_data = []
+        for t in tickers:
+            sym = t["symbol"]
+            sector = t["sector"]
+            name = t["name"]
+            weight = t["weight"]
+            
+            try:
+                if len(symbols_list) == 1:
+                    df = data
+                else:
+                    df = data[sym]
+                
+                if df.empty:
+                    continue
+                
+                df = df.dropna(subset=["Close"])
+                if len(df) < 2:
+                    continue
+                    
+                price = float(df["Close"].iloc[-1])
+                prev_price = float(df["Close"].iloc[-2])
+                change = ((price - prev_price) / prev_price) * 100
+                
+                heatmap_data.append({
+                    "symbol": sym,
+                    "name": name,
+                    "sector": sector,
+                    "weight": weight,
+                    "price": round(price, 2),
+                    "change": round(change, 2)
+                })
+            except Exception as ex:
+                print(f"Failed to parse data for {sym}: {ex}")
+                continue
+                
+        return {"data": heatmap_data}
+    except Exception as e:
+        print(f"Heatmap fetch failed: {e}")
+        return {"data": []}
+
+
+@app.get("/backtest")
+def run_backtest(symbol: str, strategy: str):
+    try:
+        symbol = normalize_symbol(symbol)
+        df = get_stock_history_raw(symbol, period="1y", interval="1d")
+        if df is None or df.empty:
+            return {"error": "No data available for symbol"}
+            
+        df = calculate_indicators(df)
+        
+        initial_cash = 100000.0
+        cash = initial_cash
+        shares = 0
+        trades_log = []
+        
+        entry_price = 0.0
+        entry_date = None
+        
+        for i in range(50, len(df)):
+            row = df.iloc[i]
+            prev_row = df.iloc[i-1]
+            price = float(row["Close"])
+            date_str = str(df.index[i])[:10]
+            
+            buy_signal = False
+            sell_signal = False
+            
+            if strategy == "RSI_REVERSION":
+                rsi = float(row.get("RSI", 50.0))
+                prev_rsi = float(prev_row.get("RSI", 50.0))
+                if rsi < 30.0 and prev_rsi >= 30.0:
+                    buy_signal = True
+                elif rsi > 70.0 and prev_rsi <= 70.0:
+                    sell_signal = True
+            elif strategy == "EMA_CROSSOVER":
+                ema12 = float(row.get("EMA_12", 0.0))
+                ema26 = float(row.get("EMA_26", 0.0))
+                prev_ema12 = float(prev_row.get("EMA_12", 0.0))
+                prev_ema26 = float(prev_row.get("EMA_26", 0.0))
+                if ema12 > ema26 and prev_ema12 <= prev_ema26:
+                    buy_signal = True
+                elif ema12 < ema26 and prev_ema12 >= prev_ema26:
+                    sell_signal = True
+            else:
+                return {"error": "Invalid strategy type"}
+                
+            if buy_signal and shares == 0 and cash >= price:
+                shares = cash // price
+                cash -= shares * price
+                entry_price = price
+                entry_date = date_str
+            elif sell_signal and shares > 0:
+                sell_price = price
+                trade_return = ((sell_price - entry_price) / entry_price) * 100
+                cash += shares * sell_price
+                shares = 0
+                trades_log.append({
+                    "entry_date": entry_date,
+                    "exit_date": date_str,
+                    "entry_price": round(entry_price, 2),
+                    "exit_price": round(sell_price, 2),
+                    "return": round(trade_return, 2)
+                })
+                
+        final_price = float(df["Close"].iloc[-1])
+        final_date = str(df.index[-1])[:10]
+        if shares > 0:
+            trade_return = ((final_price - entry_price) / entry_price) * 100
+            cash += shares * final_price
+            shares = 0
+            trades_log.append({
+                "entry_date": entry_date,
+                "exit_date": final_date,
+                "entry_price": round(entry_price, 2),
+                "exit_price": round(final_price, 2),
+                "return": round(trade_return, 2)
+            })
+            
+        strategy_return = ((cash - initial_cash) / initial_cash) * 100
+        
+        start_price = float(df["Close"].iloc[50])
+        buy_hold_return = ((final_price - start_price) / start_price) * 100
+        
+        winning_trades = [t for t in trades_log if t["return"] > 0]
+        win_rate = (len(winning_trades) / len(trades_log)) * 100 if trades_log else 0.0
+        
+        return {
+            "symbol": symbol,
+            "strategy": strategy,
+            "initial_capital": initial_cash,
+            "final_capital": round(cash, 2),
+            "strategy_return": round(strategy_return, 2),
+            "buy_and_hold_return": round(buy_hold_return, 2),
+            "total_trades": len(trades_log),
+            "win_rate": round(win_rate, 2),
+            "trades": trades_log
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+

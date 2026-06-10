@@ -662,6 +662,11 @@ export default function Dashboard() {
     const [loading, setLoad] = useState(false);
     const [error, setError] = useState("");
 
+    const [backtestStrategy, setBacktestStrategy] = useState("RSI_REVERSION");
+    const [backtestData, setBacktestData] = useState(null);
+    const [backtestLoading, setBacktestLoading] = useState(false);
+    const [backtestError, setBacktestError] = useState("");
+
     const [watchlist, setWatchlist] = useState([]);
     const [watchlistLoading, setWatchlistLoading] = useState(false);
 
@@ -800,6 +805,30 @@ export default function Dashboard() {
             }
         } finally { setLoad(false); }
     }, [symbol, period]);
+
+    const handleRunBacktest = async () => {
+        if (!data?.symbol) return;
+        try {
+            setBacktestLoading(true);
+            setBacktestError("");
+            setBacktestData(null);
+            const res = await axios.get(`${API_BASE}/backtest?symbol=${encodeURIComponent(data.symbol)}&strategy=${backtestStrategy}`);
+            if (res.data.error) {
+                setBacktestError(res.data.error);
+            } else {
+                setBacktestData(res.data);
+            }
+        } catch (err) {
+            setBacktestError("Failed to run backtest simulation.");
+        } finally {
+            setBacktestLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        setBacktestData(null);
+        setBacktestError("");
+    }, [data]);
 
     useEffect(() => {
         fetchWatchlist();
@@ -1657,6 +1686,188 @@ export default function Dashboard() {
                         <div className="card" style={{ padding: "20px 24px" }}>
                             <h3 style={{ fontSize: 13.5, fontWeight: 800, margin: "0 0 16px 0", fontFamily: "'Inter', sans-serif" }}>Technical Analysis Grid</h3>
                             <IndicatorsTable summary={data.summary} symbol={data.symbol} />
+                        </div>
+
+                        {/* Strategy Backtester Widget */}
+                        <div className="card" style={{ padding: "20px 24px" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                                <div>
+                                    <span style={{ fontSize: 10, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                                        🧪 No-Code Strategy Tester
+                                    </span>
+                                    <h3 style={{ fontSize: 15, fontWeight: 800, margin: "4px 0 0 0", fontFamily: "'Inter', sans-serif" }}>
+                                        Historical Backtester
+                                    </h3>
+                                </div>
+                                
+                                <div style={{ display: "flex", gap: 8 }}>
+                                    <select 
+                                        value={backtestStrategy}
+                                        onChange={e => setBacktestStrategy(e.target.value)}
+                                        style={{
+                                            background: "#0c0f1d",
+                                            color: "#f3f4f6",
+                                            border: "1px solid rgba(255,255,255,0.08)",
+                                            borderRadius: 8,
+                                            padding: "4px 8px",
+                                            fontSize: 12,
+                                            fontWeight: 600,
+                                            outline: "none"
+                                        }}
+                                    >
+                                        <option value="RSI_REVERSION">RSI Reversion</option>
+                                        <option value="EMA_CROSSOVER">EMA Crossover</option>
+                                    </select>
+                                    
+                                    <button 
+                                        onClick={handleRunBacktest}
+                                        disabled={backtestLoading}
+                                        style={{
+                                            background: "#22c55e",
+                                            color: "#030712",
+                                            border: "none",
+                                            borderRadius: 8,
+                                            padding: "6px 14px",
+                                            fontSize: 11.5,
+                                            fontWeight: 700,
+                                            cursor: "pointer",
+                                            opacity: backtestLoading ? 0.7 : 1,
+                                            transition: "all 0.15s"
+                                        }}
+                                        onMouseEnter={e => { if (!backtestLoading) e.currentTarget.style.background = "#16a34a"; }}
+                                        onMouseLeave={e => { if (!backtestLoading) e.currentTarget.style.background = "#22c55e"; }}
+                                    >
+                                        {backtestLoading ? "Running..." : "Simulate"}
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            {backtestError && (
+                                <div style={{ background: "rgba(239, 68, 68, 0.08)", border: "1px solid rgba(239, 68, 68, 0.18)", borderRadius: 10, padding: "10px 12px", color: "#ef4444", fontSize: 12, marginBottom: 12 }}>
+                                    {backtestError}
+                                </div>
+                            )}
+                            
+                            {!backtestData && !backtestLoading && !backtestError && (
+                                <div style={{ padding: "20px 10px", textAlign: "center", border: "1px dashed rgba(255,255,255,0.06)", borderRadius: 10 }}>
+                                    <span style={{ fontSize: 18, display: "block", marginBottom: 6 }}>🧪</span>
+                                    <span style={{ fontSize: 11, color: "var(--text-muted)", lineHeight: 1.5, display: "block" }}>
+                                        Select a strategy rule from the dropdown and click "Simulate" to run a 1-year historical backtest.
+                                    </span>
+                                </div>
+                            )}
+                            
+                            {backtestLoading && (
+                                <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "10px 0" }}>
+                                    <div className="skel" style={{ height: 12, width: "60%" }} />
+                                    <div className="skel" style={{ height: 35, width: "100%" }} />
+                                    <div className="skel" style={{ height: 60, width: "100%" }} />
+                                </div>
+                            )}
+                            
+                            {backtestData && (
+                                <div style={{ display: "flex", flexDirection: "column", gap: 16, animation: "fadeUp 0.3s ease" }}>
+                                    {/* Key Summary Badges */}
+                                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+                                        <div style={{ background: "rgba(255,255,255,0.01)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 10, padding: 10, textAlign: "center" }}>
+                                            <span style={{ fontSize: 9, color: "var(--text-muted)", textTransform: "uppercase", display: "block", marginBottom: 4 }}>Win Rate</span>
+                                            <span style={{ fontSize: 16, fontWeight: 800, color: backtestData.win_rate >= 50 ? "#22c55e" : "#ef4444", fontFamily: "'JetBrains Mono', monospace" }}>
+                                                {backtestData.win_rate}%
+                                            </span>
+                                        </div>
+                                        <div style={{ background: "rgba(255,255,255,0.01)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 10, padding: 10, textAlign: "center" }}>
+                                            <span style={{ fontSize: 9, color: "var(--text-muted)", textTransform: "uppercase", display: "block", marginBottom: 4 }}>Strategy Return</span>
+                                            <span style={{ fontSize: 16, fontWeight: 800, color: backtestData.strategy_return >= 0 ? "#22c55e" : "#ef4444", fontFamily: "'JetBrains Mono', monospace" }}>
+                                                {backtestData.strategy_return >= 0 ? "+" : ""}{backtestData.strategy_return}%
+                                            </span>
+                                        </div>
+                                        <div style={{ background: "rgba(255,255,255,0.01)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 10, padding: 10, textAlign: "center" }}>
+                                            <span style={{ fontSize: 9, color: "var(--text-muted)", textTransform: "uppercase", display: "block", marginBottom: 4 }}>Buy & Hold</span>
+                                            <span style={{ fontSize: 16, fontWeight: 800, color: backtestData.buy_and_hold_return >= 0 ? "#22c55e" : "#ef4444", fontFamily: "'JetBrains Mono', monospace" }}>
+                                                {backtestData.buy_and_hold_return >= 0 ? "+" : ""}{backtestData.buy_and_hold_return}%
+                                            </span>
+                                        </div>
+                                    </div>
+                                    
+                                    {/* Visual Performance Meter */}
+                                    <div style={{ background: "rgba(255,255,255,0.015)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 12, padding: "12px 14px" }}>
+                                        <span style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", display: "block", marginBottom: 8 }}>
+                                            Performance vs Buy & Hold
+                                        </span>
+                                        
+                                        {/* Strategy Bar */}
+                                        <div style={{ marginBottom: 10 }}>
+                                            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, marginBottom: 4 }}>
+                                                <span style={{ color: "var(--text-secondary)" }}>Strategy Return</span>
+                                                <span style={{ fontWeight: 700, color: backtestData.strategy_return >= 0 ? "#22c55e" : "#ef4444" }}>{backtestData.strategy_return}%</span>
+                                            </div>
+                                            <div style={{ background: "rgba(255,255,255,0.04)", height: 6, borderRadius: 3, overflow: "hidden" }}>
+                                                <div style={{
+                                                    height: "100%",
+                                                    width: `${Math.min(Math.max(5, Math.abs(backtestData.strategy_return)), 100)}%`,
+                                                    background: backtestData.strategy_return >= 0 ? "#22c55e" : "#ef4444",
+                                                    borderRadius: 3
+                                                }} />
+                                            </div>
+                                        </div>
+
+                                        {/* Buy & Hold Bar */}
+                                        <div>
+                                            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, marginBottom: 4 }}>
+                                                <span style={{ color: "var(--text-secondary)" }}>Buy & Hold Return</span>
+                                                <span style={{ fontWeight: 700, color: backtestData.buy_and_hold_return >= 0 ? "#22c55e" : "#ef4444" }}>{backtestData.buy_and_hold_return}%</span>
+                                            </div>
+                                            <div style={{ background: "rgba(255,255,255,0.04)", height: 6, borderRadius: 3, overflow: "hidden" }}>
+                                                <div style={{
+                                                    height: "100%",
+                                                    width: `${Math.min(Math.max(5, Math.abs(backtestData.buy_and_hold_return)), 100)}%`,
+                                                    background: backtestData.buy_and_hold_return >= 0 ? "#22c55e" : "#ef4444",
+                                                    borderRadius: 3
+                                                }} />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Trades History Table */}
+                                    <div>
+                                        <span style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", display: "block", marginBottom: 8 }}>
+                                            Simulated Trades ({backtestData.total_trades})
+                                        </span>
+                                        {backtestData.trades.length === 0 ? (
+                                            <div style={{ fontSize: 11, color: "var(--text-faint)", textAlign: "center", padding: "10px 0" }}>
+                                                No trades executed under current market condition.
+                                            </div>
+                                        ) : (
+                                            <div style={{ maxHeight: 150, overflowY: "auto", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 8 }}>
+                                                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, textAlign: "left" }}>
+                                                    <thead>
+                                                        <tr style={{ background: "rgba(255,255,255,0.02)", borderBottom: "1px solid rgba(255,255,255,0.05)", color: "var(--text-muted)" }}>
+                                                            <th style={{ padding: "6px 8px" }}>Entry</th>
+                                                            <th style={{ padding: "6px 8px" }}>Exit</th>
+                                                            <th style={{ padding: "6px 8px" }}>Buy</th>
+                                                            <th style={{ padding: "6px 8px" }}>Sell</th>
+                                                            <th style={{ padding: "6px 8px", textAlign: "right" }}>Return</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {backtestData.trades.map((t, idx) => (
+                                                            <tr key={idx} style={{ borderBottom: "1px solid rgba(255,255,255,0.03)" }}>
+                                                                <td style={{ padding: "6px 8px" }}>{t.entry_date}</td>
+                                                                <td style={{ padding: "6px 8px" }}>{t.exit_date}</td>
+                                                                <td style={{ padding: "6px 8px", fontFamily: "'JetBrains Mono', monospace" }}>{t.entry_price}</td>
+                                                                <td style={{ padding: "6px 8px", fontFamily: "'JetBrains Mono', monospace" }}>{t.exit_price}</td>
+                                                                <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: 700, color: t.return >= 0 ? "#22c55e" : "#ef4444", fontFamily: "'JetBrains Mono', monospace" }}>
+                                                                    {t.return >= 0 ? "+" : ""}{t.return}%
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         {data.engine_details && (
