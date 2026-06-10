@@ -72,14 +72,19 @@ const US_STOCKS = new Set([
 
 export function formatSymbol(raw) {
     const s = raw.toUpperCase().trim();
-    if (s.includes(".")) return s;
-    if (s.startsWith("^")) return s;
+    if (s.includes(".") || s.includes("=") || s.includes("-") || s.startsWith("^")) {
+        return s;
+    }
     if (NSE_STOCKS.has(s)) {
         const ALIAS = { "HDFC": "HDFCBANK.NS", "L&T": "LT.NS", "M&M": "M&M.NS", "BAJAJ": "BAJAJ-AUTO.NS" };
         return ALIAS[s] ?? (s + ".NS");
     }
     if (US_STOCKS.has(s)) return s;
-    if (/^[A-Z]{1,4}$/.test(s)) return s;
+    // US tickers are typically 1-5 letters
+    if (/^[A-Z]{1,5}$/.test(s)) return s;
+    // Forex / Crypto / other instruments are typically 6 characters (e.g. EURUSD, BTCUSD)
+    if (/^[A-Z]{6}$/.test(s)) return s;
+    
     return s + ".NS";
 }
 
@@ -610,7 +615,7 @@ export default function Dashboard() {
         const target = formatSymbol(raw);
         setLoad(true); setError(""); setData(null);
         try {
-            const result = await fetchWithRetry(`${API_BASE}/analyze?symbol=${target}&period=${period}`);
+            const result = await fetchWithRetry(`${API_BASE}/analyze?symbol=${encodeURIComponent(target)}&period=${period}`);
             if (!result || result.error) throw new Error(result?.error || "Invalid symbol or no data available");
             setData(result);
         } catch (err) {

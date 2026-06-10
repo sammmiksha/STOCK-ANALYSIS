@@ -75,11 +75,34 @@ def check_rate_limit(ip: str) -> bool:
 # -------------------- SYMBOL NORMALIZATION --------------------
 def normalize_symbol(symbol: str) -> str:
     symbol = symbol.upper().strip()
+    
+    # 1. Indian stock quick-maps
     indian_stocks = ["RELIANCE", "TCS", "INFY", "WIPRO", "HDFCBANK", "BAJFINANCE"]
     if symbol in indian_stocks:
         return symbol + ".NS"
-    if "." in symbol or symbol.startswith("^"):
-        return symbol
+        
+    # 2. Precious Metals spot to futures mapping
+    metal_mappings = {
+        "XAUUSD": "GC=F",
+        "XAGUSD": "SI=F",
+        "XPTUSD": "PL=F",
+        "XPDUSD": "PA=F"
+    }
+    if symbol in metal_mappings:
+        return metal_mappings[symbol]
+        
+    # 3. Crypto normalization (e.g. BTCUSD -> BTC-USD, BTCUSDT -> BTC-USD)
+    cryptos = {"BTC", "ETH", "SOL", "DOGE", "ADA", "XRP", "LTC", "DOT", "LINK", "UNI", "AVAX", "MATIC", "SHIB", "TRX", "BCH", "XLM", "ETC", "ATOM", "ALGO"}
+    if symbol.endswith("USD") and symbol[:-3] in cryptos:
+        return f"{symbol[:-3]}-USD"
+    if symbol.endswith("USDT") and symbol[:-4] in cryptos:
+        return f"{symbol[:-4]}-USD"
+        
+    # 4. Forex normalization (e.g. EURUSD -> EURUSD=X)
+    currencies = {"USD", "EUR", "GBP", "JPY", "AUD", "CAD", "CHF", "NZD", "CNY", "INR", "SGD", "HKD", "KRW", "SEK", "NOK", "DKK", "ZAR", "MXN", "BRL", "TRY", "RUB", "AED", "SAR"}
+    if len(symbol) == 6 and symbol[:3] in currencies and symbol[3:] in currencies:
+        return symbol + "=X"
+        
     return symbol
 
 
