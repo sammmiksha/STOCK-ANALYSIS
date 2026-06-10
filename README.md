@@ -133,7 +133,7 @@ npm run dev
 
 ## 👨‍💻 Author
 
-Sam — BSc IT Student
+Sam — BSc IT Student  
 Focused on AI, ML, and Full-Stack Development
 
 ---
