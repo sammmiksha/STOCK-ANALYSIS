@@ -590,7 +590,7 @@ watchlists = load_watchlists()
 @app.post("/watchlist/add")
 def add_watchlist(req: WatchlistRequest):
     user_id = req.user.strip()
-    sym = normalize_symbol(req.symbol.upper().strip())
+    sym = req.symbol.upper().strip()
     
     user_symbols = watchlists.setdefault(user_id, [])
     if sym not in user_symbols:
@@ -601,7 +601,7 @@ def add_watchlist(req: WatchlistRequest):
 @app.post("/watchlist/remove")
 def remove_watchlist(req: WatchlistRequest):
     user_id = req.user.strip()
-    sym = normalize_symbol(req.symbol.upper().strip())
+    sym = req.symbol.upper().strip()
     
     user_symbols = watchlists.get(user_id, [])
     if sym in user_symbols:
@@ -652,7 +652,7 @@ alerts = load_alerts()
 @app.post("/alerts/set")
 def set_alert(req: AlertSetRequest):
     user_id = req.user.strip()
-    sym = normalize_symbol(req.symbol.upper().strip())
+    sym = req.symbol.upper().strip()
     atype = req.alert_type.lower().strip() if req.alert_type else "drop"
     if atype not in ["drop", "growth"]:
         atype = "drop"
@@ -675,7 +675,7 @@ def set_alert(req: AlertSetRequest):
 @app.post("/alerts/remove")
 def remove_alert(req: AlertRemoveRequest):
     user_id = req.user.strip()
-    sym = normalize_symbol(req.symbol.upper().strip())
+    sym = req.symbol.upper().strip()
     user_alerts = alerts.get(user_id, [])
     user_alerts = [a for a in user_alerts if a["symbol"] != sym]
     alerts[user_id] = user_alerts
