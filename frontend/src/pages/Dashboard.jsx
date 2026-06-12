@@ -22,6 +22,13 @@ const API_BASE = window.location.hostname === "localhost" || window.location.hos
     ? "http://localhost:8000"
     : "https://stockai-ts48.onrender.com";
 
+const withTimeout = (promise, ms = 2000) => {
+    return Promise.race([
+        promise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), ms))
+    ]);
+};
+
 const PERIODS = [
     { label: "1D", val: "1d" },
     { label: "1W", val: "5d" },
@@ -914,7 +921,7 @@ export default function Dashboard() {
             let loadedFromFirestore = false;
             try {
                 const docRef = doc(db, "watchlists", user.uid);
-                const docSnap = await getDoc(docRef);
+                const docSnap = await withTimeout(getDoc(docRef), 2000);
                 if (docSnap.exists()) {
                     setWatchlist(docSnap.data().symbols || []);
                     loadedFromFirestore = true;
@@ -940,7 +947,7 @@ export default function Dashboard() {
             let loadedFromFirestore = false;
             try {
                 const docRef = doc(db, "alerts", user.uid);
-                const docSnap = await getDoc(docRef);
+                const docSnap = await withTimeout(getDoc(docRef), 2000);
                 if (docSnap.exists()) {
                     setAlerts(docSnap.data().alerts || []);
                     loadedFromFirestore = true;
@@ -970,7 +977,7 @@ export default function Dashboard() {
         
         try {
             const docRef = doc(db, "watchlists", user.uid);
-            await setDoc(docRef, { symbols: updatedSymbols }, { merge: true });
+            await withTimeout(setDoc(docRef, { symbols: updatedSymbols }, { merge: true }), 2000);
         } catch (err) {
             console.warn("Firestore watchlist toggle failed:", err);
         }
@@ -993,7 +1000,7 @@ export default function Dashboard() {
         
         try {
             const docRef = doc(db, "watchlists", user.uid);
-            await setDoc(docRef, { symbols: updatedSymbols }, { merge: true });
+            await withTimeout(setDoc(docRef, { symbols: updatedSymbols }, { merge: true }), 2000);
         } catch (err) {
             console.warn("Firestore watchlist remove failed:", err);
         }
@@ -1022,7 +1029,7 @@ export default function Dashboard() {
         
         try {
             const docRef = doc(db, "alerts", user.uid);
-            await setDoc(docRef, { alerts: updatedAlerts }, { merge: true });
+            await withTimeout(setDoc(docRef, { alerts: updatedAlerts }, { merge: true }), 2000);
         } catch (err) {
             console.warn("Firestore set alert failed:", err);
         }
@@ -1054,7 +1061,7 @@ export default function Dashboard() {
         
         try {
             const docRef = doc(db, "alerts", user.uid);
-            await setDoc(docRef, { alerts: updatedAlerts }, { merge: true });
+            await withTimeout(setDoc(docRef, { alerts: updatedAlerts }, { merge: true }), 2000);
         } catch (err) {
             console.warn("Firestore remove alert failed:", err);
         }
