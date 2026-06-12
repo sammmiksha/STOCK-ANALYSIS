@@ -74,9 +74,19 @@ const US_STOCKS = new Set([
     "BITO", "GBTC", "ETHE",
 ]);
 
+const METAL_ALIASES = new Set([
+    "XAUUSD", "XAU", "GOLD",
+    "XAGUSD", "XAG", "SILVER",
+    "XPTUSD", "XPT", "PLATINUM",
+    "XPDUSD", "XPD", "PALLADIUM"
+]);
+
 export function formatSymbol(raw) {
     const s = raw.toUpperCase().trim();
     if (s.includes(".") || s.includes("=") || s.includes("-") || s.startsWith("^")) {
+        return s;
+    }
+    if (METAL_ALIASES.has(s)) {
         return s;
     }
     if (NSE_STOCKS.has(s)) {
@@ -2016,6 +2026,127 @@ export default function Dashboard() {
                                 />
                             </div>
                         </div>
+
+                        {data.news && (
+                            <div className="card" style={{ padding: "20px 24px" }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
+                                    <div>
+                                        <span style={{ fontSize: 10, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                                            📰 Live Accuracy Check
+                                        </span>
+                                        <h3 style={{ fontSize: 15, fontWeight: 800, margin: "4px 0 0 0", fontFamily: "'Inter', sans-serif" }}>
+                                            Market Sentiment & News Feed
+                                        </h3>
+                                    </div>
+                                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                        <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)" }}>Overall Sentiment:</span>
+                                        <span style={{
+                                            fontSize: 11,
+                                            fontWeight: 800,
+                                            padding: "3px 8px",
+                                            borderRadius: 6,
+                                            background: data.sentiment === "BULLISH" ? "rgba(34,197,94,0.12)" : data.sentiment === "BEARISH" ? "rgba(239,68,68,0.12)" : "rgba(255,255,255,0.06)",
+                                            color: data.sentiment === "BULLISH" ? "#22c55e" : data.sentiment === "BEARISH" ? "#ef4444" : "#9ca3af",
+                                            letterSpacing: "0.02em"
+                                        }}>
+                                            {data.sentiment || "NEUTRAL"}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div style={{ marginBottom: 20 }}>
+                                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, fontSize: 11.5 }}>
+                                        <span style={{ color: "var(--text-muted)" }}>News Sentiment Score</span>
+                                        <span style={{ fontWeight: 700, color: data.sentiment_score > 0.15 ? "#22c55e" : data.sentiment_score < -0.15 ? "#ef4444" : "#9ca3af" }}>
+                                            {data.sentiment_score > 0 ? "+" : ""}{data.sentiment_score}
+                                        </span>
+                                    </div>
+                                    <div style={{ position: "relative", height: 8, background: "rgba(255,255,255,0.04)", borderRadius: 4, overflow: "hidden" }}>
+                                        <div style={{
+                                            position: "absolute",
+                                            left: `${((data.sentiment_score + 1.0) / 2.0) * 100}%`,
+                                            top: 0,
+                                            width: 8,
+                                            height: 8,
+                                            background: "#fff",
+                                            borderRadius: "50%",
+                                            boxShadow: "0 0 8px rgba(255,255,255,0.6)",
+                                            transform: "translateX(-50%)",
+                                            zIndex: 2
+                                        }} />
+                                        <div style={{
+                                            position: "absolute",
+                                            left: 0,
+                                            top: 0,
+                                            width: "100%",
+                                            height: "100%",
+                                            background: "linear-gradient(90deg, #ef4444 0%, #4b5563 50%, #22c55e 100%)",
+                                            opacity: 0.6
+                                        }} />
+                                    </div>
+                                    <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4, fontSize: 9.5, color: "var(--text-muted)" }}>
+                                        <span>Bearish (-1.0)</span>
+                                        <span>Neutral (0.0)</span>
+                                        <span>Bullish (+1.0)</span>
+                                    </div>
+                                </div>
+
+                                {data.news.length === 0 ? (
+                                    <div style={{ padding: "20px 10px", textAlign: "center", border: "1px dashed rgba(255,255,255,0.06)", borderRadius: 10 }}>
+                                        <span style={{ fontSize: 11, color: "var(--text-muted)", display: "block" }}>
+                                            No recent news articles found for this ticker.
+                                        </span>
+                                    </div>
+                                ) : (
+                                    <div style={{ display: "flex", flexDirection: "column", gap: 10, maxHeight: 350, overflowY: "auto", paddingRight: 4 }}>
+                                        {data.news.map((item, i) => (
+                                            <a key={i} href={item.link} target="_blank" rel="noopener noreferrer" style={{
+                                                display: "flex",
+                                                flexDirection: "column",
+                                                gap: 6,
+                                                padding: 12,
+                                                borderRadius: 10,
+                                                background: "rgba(255,255,255,0.015)",
+                                                border: "1px solid rgba(255,255,255,0.04)",
+                                                textDecoration: "none",
+                                                transition: "all 0.15s ease"
+                                            }}
+                                            className="news-card-link"
+                                            onMouseEnter={e => {
+                                                e.currentTarget.style.background = "rgba(255,255,255,0.035)";
+                                                e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)";
+                                            }}
+                                            onMouseLeave={e => {
+                                                e.currentTarget.style.background = "rgba(255,255,255,0.015)";
+                                                e.currentTarget.style.borderColor = "rgba(255,255,255,0.04)";
+                                            }}>
+                                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+                                                    <span style={{ fontSize: 12.5, fontWeight: 700, color: "#f3f4f6", lineHeight: 1.4 }}>
+                                                        {item.title}
+                                                    </span>
+                                                    <span style={{
+                                                        fontSize: 9,
+                                                        fontWeight: 800,
+                                                        textTransform: "uppercase",
+                                                        padding: "2px 6px",
+                                                        borderRadius: 4,
+                                                        background: item.sentiment === "positive" ? "rgba(34,197,94,0.12)" : item.sentiment === "negative" ? "rgba(239,68,68,0.12)" : "rgba(255,255,255,0.06)",
+                                                        color: item.sentiment === "positive" ? "#22c55e" : item.sentiment === "negative" ? "#ef4444" : "#9ca3af",
+                                                        flexShrink: 0
+                                                    }}>
+                                                        {item.sentiment}
+                                                    </span>
+                                                </div>
+                                                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10.5, color: "var(--text-muted)" }}>
+                                                    <span>{item.publisher || "Market Source"}</span>
+                                                    <span>{item.pubDate ? new Date(item.pubDate).toLocaleDateString() : ""}</span>
+                                                </div>
+                                            </a>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
 
                         <div>
                             <h3 style={{ fontSize: 13, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-muted)", margin: "0 0 12px 6px" }}>Key Market Statistics</h3>

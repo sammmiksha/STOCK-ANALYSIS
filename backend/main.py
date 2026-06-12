@@ -84,9 +84,17 @@ def normalize_symbol(symbol: str) -> str:
     # 2. Precious Metals spot to futures mapping
     metal_mappings = {
         "XAUUSD": "GC=F",
+        "XAU": "GC=F",
+        "GOLD": "GC=F",
         "XAGUSD": "SI=F",
+        "XAG": "SI=F",
+        "SILVER": "SI=F",
         "XPTUSD": "PL=F",
-        "XPDUSD": "PA=F"
+        "XPT": "PL=F",
+        "PLATINUM": "PL=F",
+        "XPDUSD": "PA=F",
+        "XPD": "PA=F",
+        "PALLADIUM": "PA=F"
     }
     if symbol in metal_mappings:
         return metal_mappings[symbol]
@@ -109,6 +117,7 @@ def normalize_symbol(symbol: str) -> str:
 # -------------------- RAW DATA FETCH --------------------
 def get_stock_history_raw(symbol: str, period: str, interval: str) -> Optional[pd.DataFrame]:
     try:
+        symbol = normalize_symbol(symbol)
         stock = yf.Ticker(symbol)
         df = stock.history(period=period, interval=interval, auto_adjust=True)
         if df.empty and "." not in symbol and "=" not in symbol and "-" not in symbol:
@@ -428,21 +437,48 @@ def search_stocks(q: str = Query(..., min_length=1), request: Request = None):
             raise HTTPException(status_code=429, detail="Too many search requests. Please wait a minute.")
             
     try:
-        results = yf.search(q)
-        quotes = results.get("quotes", [])
-
         suggestions = []
-        for item in quotes[:10]:
+        q_upper = q.upper().strip()
+        
+        # 1. Inject custom suggestions for precious metals
+        metals_suggestions = []
+        if "XAU" in q_upper or "GOLD" in q_upper:
+            metals_suggestions.append({"symbol": "XAUUSD", "name": "Gold Spot / Futures (GC=F)", "exchange": "Precious Metals"})
+        if "XAG" in q_upper or "SILVER" in q_upper:
+            metals_suggestions.append({"symbol": "XAGUSD", "name": "Silver Spot / Futures (SI=F)", "exchange": "Precious Metals"})
+        if "XPT" in q_upper or "PLATINUM" in q_upper:
+            metals_suggestions.append({"symbol": "XPTUSD", "name": "Platinum Spot / Futures (PL=F)", "exchange": "Precious Metals"})
+        if "XPD" in q_upper or "PALLADIUM" in q_upper:
+            metals_suggestions.append({"symbol": "XPDUSD", "name": "Palladium Spot / Futures (PA=F)", "exchange": "Precious Metals"})
+
+        for item in metals_suggestions:
+            suggestions.append(item)
+
+        # 2. Fetch standard yfinance search results (handling version mismatch)
+        quotes = []
+        try:
+            if hasattr(yf, "Search") and isinstance(yf.Search, type):
+                quotes = yf.Search(q).quotes
+            else:
+                results = yf.search(q)
+                if isinstance(results, dict):
+                    quotes = results.get("quotes", [])
+        except Exception as search_err:
+            print("[WARN] yfinance Search call failed, using fallback:", search_err)
+            
+        for item in quotes:
             symbol = item.get("symbol")
             name = item.get("shortname") or item.get("longname")
             exchange = item.get("exchange")
 
             if symbol:
-                suggestions.append(
-                    {"symbol": symbol, "name": name, "exchange": exchange}
-                )
+                # Avoid duplicates if custom metal is already added
+                if not any(s["symbol"] == symbol for s in suggestions):
+                    suggestions.append(
+                        {"symbol": symbol, "name": name, "exchange": exchange}
+                    )
 
-        return {"results": suggestions}
+        return {"results": suggestions[:10]}
 
     except Exception as e:
         print("Search error:", e)
@@ -869,6 +905,77 @@ def generate_ai_insight(latest: pd.Series, symbol: str, signal: str, score: floa
     return f"{sentence1} {sentence2}"
 
 
+# -------------------- NEWS SENTIMENT ANALYZER --------------------
+def get_news_sentiment(symbol: str) -> dict:
+    try:
+        import re
+        symbol = normalize_symbol(symbol)
+        ticker = yf.Ticker(symbol)
+        raw_news = ticker.news
+        if not raw_news:
+            return {"score": 0.0, "label": "NEUTRAL", "articles": []}
+            
+        articles = []
+        total_score = 0.0
+        
+        pos_words = {"bullish", "growth", "high", "upgrade", "rise", "gain", "higher", "positive", "surge", "rally", "upbeat", "profit", "beat", "strong", "gains", "jump", "soar", "optimistic"}
+        neg_words = {"bearish", "fall", "drop", "cuts", "lower", "downgrade", "losses", "warning", "negative", "concern", "decline", "slump", "miss", "weak", "plunge", "fears", "pessimistic"}
+        
+        for item in raw_news[:8]:
+            content = item.get("content", {})
+            title = content.get("title", "")
+            summary = content.get("summary", "") or ""
+            provider = content.get("provider", {}).get("displayName", "")
+            pubDate = content.get("pubDate", "")
+            link = content.get("canonicalUrl", {}).get("url") or content.get("clickThroughUrl", {}).get("url") or ""
+            
+            if not title:
+                continue
+                
+            text = (title + " " + summary).lower()
+            words = re.findall(r"\b[a-z]+\b", text)
+            
+            p_count = sum(1 for w in words if w in pos_words)
+            n_count = sum(1 for w in words if w in neg_words)
+            
+            if p_count > n_count:
+                item_sentiment = "positive"
+                item_score = 0.25
+            elif n_count > p_count:
+                item_sentiment = "negative"
+                item_score = -0.25
+            else:
+                item_sentiment = "neutral"
+                item_score = 0.0
+                
+            total_score += item_score
+            articles.append({
+                "title": title,
+                "publisher": provider,
+                "link": link,
+                "pubDate": pubDate,
+                "sentiment": item_sentiment
+            })
+            
+        final_score = max(-1.0, min(1.0, (total_score / max(len(articles), 1)) * 3.5))
+        
+        if final_score > 0.15:
+            label = "BULLISH"
+        elif final_score < -0.15:
+            label = "BEARISH"
+        else:
+            label = "NEUTRAL"
+            
+        return {
+            "score": round(final_score, 2),
+            "label": label,
+            "articles": articles
+        }
+    except Exception as e:
+        print("[ERROR] get_news_sentiment failed:", e)
+        return {"score": 0.0, "label": "NEUTRAL", "articles": []}
+
+
 # -------------------- ANALYZE --------------------
 @app.get("/analyze")
 def analyze(symbol: str, period: str = "3mo", request: Request = None):
@@ -877,7 +984,8 @@ def analyze(symbol: str, period: str = "3mo", request: Request = None):
             raise HTTPException(status_code=429, detail="Too many analysis requests. Please try again in a minute.")
 
     try:
-        symbol = normalize_symbol(symbol)
+        original_symbol = symbol.strip().upper()
+        symbol = normalize_symbol(original_symbol)
         
         daily_df = get_stock_history_raw(symbol, period="1y", interval="1d")
         if daily_df is None or daily_df.empty:
@@ -909,6 +1017,18 @@ def analyze(symbol: str, period: str = "3mo", request: Request = None):
             intraday_df = calculate_indicators(intraday_df)
             i_latest = intraday_df.iloc[-1]
             intraday_signal, intraday_confidence, _, _ = generate_signal(i_latest)
+
+        # Sentiment Analysis
+        sentiment_res = get_news_sentiment(symbol)
+        sentiment_label = sentiment_res["label"]
+        
+        # Adjust technical confidence based on sentiment alignment
+        if signal == "BUY" and sentiment_label == "BULLISH":
+            confidence = min(confidence + 10, 95)
+        elif signal == "SELL" and sentiment_label == "BEARISH":
+            confidence = min(confidence + 10, 95)
+        elif (signal == "BUY" and sentiment_label == "BEARISH") or (signal == "SELL" and sentiment_label == "BULLISH"):
+            confidence = max(confidence - 10, 40)
 
         realtime_pred = generate_realtime_prediction(signal, weekly_signal, intraday_signal)
         realtime_pred["intraday_confidence"] = intraday_confidence
@@ -1008,8 +1128,11 @@ def analyze(symbol: str, period: str = "3mo", request: Request = None):
         change = ((price - prev_price) / prev_price) * 100
 
         return {
-            "symbol": symbol,
+            "symbol": original_symbol,
             "signal": signal,
+            "sentiment": sentiment_res["label"],
+            "sentiment_score": sentiment_res["score"],
+            "news": sentiment_res["articles"],
             "summary": {
                 "price": safe_float(price),
                 "change": safe_float(change),
@@ -1131,7 +1254,8 @@ def get_market_heatmap():
 @app.get("/backtest")
 def run_backtest(symbol: str, strategy: str):
     try:
-        symbol = normalize_symbol(symbol)
+        original_symbol = symbol.strip().upper()
+        symbol = normalize_symbol(original_symbol)
         df = get_stock_history_raw(symbol, period="1y", interval="1d")
         if df is None or df.empty:
             return {"error": "No data available for symbol"}
@@ -1215,7 +1339,7 @@ def run_backtest(symbol: str, strategy: str):
         win_rate = (len(winning_trades) / len(trades_log)) * 100 if trades_log else 0.0
         
         return {
-            "symbol": symbol,
+            "symbol": original_symbol,
             "strategy": strategy,
             "initial_capital": initial_cash,
             "final_capital": round(cash, 2),
