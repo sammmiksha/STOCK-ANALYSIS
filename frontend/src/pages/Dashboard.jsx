@@ -508,7 +508,7 @@ function InteractiveChart({ history, positive, symbol, entryZones, realtimePredi
             )}
 
             <div style={{ width: "100%", height: 260, position: "relative" }}>
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height={260} minWidth={0}>
                     <ComposedChart data={overlayCompare ? normalizedData : chartData} margin={{ top: 10, right: 5, left: -20, bottom: 0 }}>
                         <defs>
                             <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
