@@ -36,7 +36,7 @@ Stock Analysis is a full-stack financial analysis platform that delivers real-ti
 * 📉 **Indicator Mapping**: Evaluates Relative Strength Index (RSI), Simple Moving Averages (SMA 20/50/200), daily support/resistance levels, and session volatility.
 * 👤 **Tabbed Profile Center**: Manage active watchlisted stocks, view pending alerts, and track your Firebase user credentials with dynamic "Days Active" counters.
 * 🔐 **Secure Authentication**: Firebase Auth integrations supporting Email + Password and Google Sign-In.
-* 🎨 **Unified Design System**: Sleek SaaS-style glassmorphic dark theme styled with premium `Inter` typography and technical `JetBrains Mono` text for chart data.
+* ⚖️ **Unified Design System**: Sleek SaaS-style glassmorphic dark theme styled with premium `Inter` typography and technical `JetBrains Mono` text for chart data.
 
 ---
 
@@ -91,53 +91,3 @@ POST /watchlist/toggle
 GET  /alerts
 POST /alerts/set
 POST /alerts/remove
-```
-
----
-
-## ⚙️ Local Setup
-
-### 1. Clone the repo
-
-```bash
-git clone https://github.com/your-username/stockai.git
-cd stockai
-```
-
-### 2. Backend setup
-
-```bash
-cd backend
-pip install -r requirements.txt
-uvicorn main:app --reload
-```
-
-### 3. Frontend setup
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
----
-
-## 🚀 Future Improvements
-
-* 📈 Real-time WebSocket updates for live price ticks
-* 🧠 ML-based prediction models
-* 📊 Advanced charting overlays (candlestick, volume histograms)
-* 📧 Real-world SMTP email notifications for triggered alerts
-
----
-
-## 👨‍💻 Author
-
-Sam — BSc IT Student  
-Focused on AI, ML, and Full-Stack Development
-
----
-
-## ⭐ If you like this project
-
-Give it a star ⭐ and share feedback!
