@@ -379,7 +379,7 @@ def generate_narrative_analysis(latest: pd.Series, prev: pd.Series, symbol: str,
     ma_alignment = "above" if price > latest["MA_50"] else "below"
     
     symbol_name = symbol.split(".")[0]
-    narrative = f"Technical analysis for {symbol_name} indicates a {trend} momentum structure with a score of {score}. "
+    narrative = f"Technical analysis for {symbol_name} indicates a {trend} momentum structure with a score of {round(score, 2)}. "
     narrative += f"The asset is currently trading at {round(price, 2)} ({round(change, 2)}% change today), "
     narrative += f"which is {ma_alignment} its 50-day moving average. "
     
