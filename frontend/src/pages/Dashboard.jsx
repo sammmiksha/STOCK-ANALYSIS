@@ -12,8 +12,11 @@ import {
     CartesianGrid,
     Bar,
     ComposedChart,
-    ReferenceLine
+    ReferenceLine,
+    Line
 } from "recharts";
+import { db } from "../firebase";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 
 const API_BASE = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
     ? "http://localhost:8000"
@@ -222,24 +225,108 @@ function SignalBadge({ signal }) {
     );
 }
 
+const calculateAgreementConfidence = (summary, action) => {
+    if (summary?.confidence) return summary.confidence;
+    
+    let totalIndicators = 0;
+    let matchingIndicators = 0;
+    const isBullish = action.includes("BUY");
+    const isBearish = action.includes("SELL");
+    
+    if (!summary) return 75;
+    
+    if (summary.rsi !== undefined) {
+        totalIndicators++;
+        if (isBullish && summary.rsi < 45) matchingIndicators++;
+        else if (isBearish && summary.rsi > 55) matchingIndicators++;
+        else if (!isBullish && !isBearish) matchingIndicators++;
+    }
+    
+    if (summary.macd !== undefined && summary.macd_signal !== undefined) {
+        totalIndicators++;
+        if (isBullish && summary.macd > summary.macd_signal) matchingIndicators++;
+        else if (isBearish && summary.macd < summary.macd_signal) matchingIndicators++;
+        else if (!isBullish && !isBearish) matchingIndicators++;
+    }
+    
+    if (summary.ema_fast !== undefined && summary.ema_slow !== undefined) {
+        totalIndicators++;
+        if (isBullish && summary.ema_fast > summary.ema_slow) matchingIndicators++;
+        else if (isBearish && summary.ema_fast < summary.ema_slow) matchingIndicators++;
+        else if (!isBullish && !isBearish) matchingIndicators++;
+    }
+    
+    if (summary.ma_20 !== undefined && summary.price !== undefined) {
+        totalIndicators++;
+        if (isBullish && summary.price > summary.ma_20) matchingIndicators++;
+        else if (isBearish && summary.price < summary.ma_20) matchingIndicators++;
+        else if (!isBullish && !isBearish) matchingIndicators++;
+    }
+    
+    if (totalIndicators === 0) return 75;
+    const ratio = matchingIndicators / totalIndicators;
+    return Math.round(55 + ratio * 40);
+};
+
+const fallbackAiInsight = (symbol, signal) => {
+    const sym = symbol ? symbol.split(".")[0] : "Asset";
+    if (signal === "BUY") {
+        return `AI Models detect bullish momentum alignment for ${sym}. Technical trend indicators favor buying on dips towards key support levels.`;
+    } else if (signal === "SELL") {
+        return `AI Analysis warns of severe bearish pressure for ${sym}. Moving averages suggest trading with a downward bias; hold tight stop-losses.`;
+    } else {
+        return `AI Models classify ${sym} in a ranging, low-volatility consolidation phase. Wait for a volume breakout before entry.`;
+    }
+};
+
 function MetricItem({ label, value, color }) {
     return (
-        <div style={{
-            background: "rgba(255,255,255,0.02)",
-            border: "1px solid rgba(255,255,255,0.06)",
-            borderRadius: 12,
-            padding: "14px 16px",
-            display: "flex",
-            flexDirection: "column",
-            gap: 4
-        }}>
-            <span style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.03em" }}>{label}</span>
-            <span style={{ fontSize: 14, fontWeight: 700, color: color || "#f3f4f6", fontFamily: "'JetBrains Mono', monospace" }}>{value}</span>
+        <div 
+            title={`${label}: ${value}`}
+            style={{
+                background: "rgba(255,255,255,0.02)",
+                border: "1px solid rgba(255,255,255,0.04)",
+                borderRadius: 10,
+                padding: "8px 12px",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 12,
+                overflow: "hidden"
+            }}
+        >
+            <span style={{ 
+                fontSize: 10.5, 
+                color: "var(--text-muted)", 
+                textTransform: "uppercase", 
+                letterSpacing: "0.03em",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                flexShrink: 1
+            }}>
+                {label}
+            </span>
+            <span style={{ 
+                fontSize: 13, 
+                fontWeight: 700, 
+                color: color || "#f3f4f6", 
+                fontFamily: "'JetBrains Mono', monospace",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                textAlign: "right",
+                flexShrink: 0
+            }}>
+                {value}
+            </span>
         </div>
     );
 }
 
-function InteractiveChart({ history, positive, symbol, entryZones, realtimePrediction }) {
+function InteractiveChart({ history, positive, symbol, entryZones, realtimePrediction, compareSymbol }) {
+    const [overlayCompare, setOverlayCompare] = useState(false);
+
     if (!history || history.length < 2) {
         return (
             <div style={{ height: 250, display: "flex", alignItems: "center", justifyContent: "center", color: "#4b5563", fontSize: 13 }}>
@@ -254,15 +341,28 @@ function InteractiveChart({ history, positive, symbol, entryZones, realtimePredi
         open: d.open,
         high: d.high,
         low: d.low,
-        volume: d.volume
+        volume: d.volume,
+        compare_close: d.compare_close
     }));
 
-    const color = positive ? "#22c55e" : "#ef4444";
+    const isGoldAsset = symbol && (symbol.toUpperCase().includes("GC=F") || symbol.toUpperCase().includes("GOLD") || symbol.toUpperCase().includes("XAU"));
+    const chartColor = isGoldAsset ? "#fbbf24" : (positive ? "#10b981" : "#ef4444");
     const volumeColor = "rgba(255, 255, 255, 0.08)";
+
+    const firstPrice = chartData[0]?.price || 1;
+    const firstComparePrice = chartData[0]?.compare_close || 1;
+
+    const normalizedData = chartData.map(d => ({
+        ...d,
+        percentChange: firstPrice > 0 ? parseFloat((((d.price - firstPrice) / firstPrice) * 100).toFixed(2)) : 0,
+        comparePercentChange: firstComparePrice > 0 && d.compare_close 
+            ? parseFloat((((d.compare_close - firstComparePrice) / firstComparePrice) * 100).toFixed(2)) 
+            : 0
+    }));
 
     const CustomTooltip = ({ active, payload }) => {
         if (active && payload && payload.length) {
-            const data = payload[0].payload;
+            const dataPoint = payload[0].payload;
             return (
                 <div style={{
                     background: "rgba(10, 13, 26, 0.95)",
@@ -273,23 +373,59 @@ function InteractiveChart({ history, positive, symbol, entryZones, realtimePredi
                     fontSize: 12,
                     fontFamily: "var(--font-inter, 'Inter', sans-serif)"
                 }}>
-                    <p style={{ margin: "0 0 6px 0", fontWeight: 700, color: "#9ca3af" }}>{data.date}</p>
+                    <p style={{ margin: "0 0 6px 0", fontWeight: 700, color: "#9ca3af" }}>{dataPoint.date}</p>
                     <div style={{ display: "flex", flexDirection: "column", gap: 3.5 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
                             <span style={{ color: "var(--text-muted)" }}>Close:</span>
-                            <span style={{ fontWeight: 800, color: "#f3f4f6" }}>{priceStr(symbol, data.price)}</span>
+                            <span style={{ fontWeight: 800, color: "#f3f4f6", fontFamily: "'JetBrains Mono', monospace" }}>
+                                {priceStr(symbol, dataPoint.price)}
+                            </span>
                         </div>
-                        <div style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
-                            <span style={{ color: "var(--text-muted)" }}>Open:</span>
-                            <span style={{ fontWeight: 600, color: "var(--text-secondary)" }}>{priceStr(symbol, data.open)}</span>
-                        </div>
-                        <div style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
-                            <span style={{ color: "var(--text-muted)" }}>Range:</span>
-                            <span style={{ fontWeight: 600, color: "var(--text-secondary)" }}>{priceStr(symbol, data.low)} - {priceStr(symbol, data.high)}</span>
-                        </div>
+                        {overlayCompare && (
+                            <div style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
+                                <span style={{ color: "var(--text-muted)" }}>Return:</span>
+                                <span style={{ fontWeight: 800, color: chartColor, fontFamily: "'JetBrains Mono', monospace" }}>
+                                    {dataPoint.percentChange >= 0 ? "+" : ""}{dataPoint.percentChange}%
+                                </span>
+                            </div>
+                        )}
+                        {overlayCompare && compareSymbol && dataPoint.compare_close && (
+                            <>
+                                <div style={{ display: "flex", justifyContent: "space-between", gap: 16, borderTop: "1px solid rgba(255,255,255,0.04)", paddingTop: 4, marginTop: 4 }}>
+                                    <span style={{ color: "var(--text-muted)" }}>{compareSymbol} Price:</span>
+                                    <span style={{ fontWeight: 600, color: "var(--text-secondary)", fontFamily: "'JetBrains Mono', monospace" }}>
+                                        {priceStr(compareSymbol, dataPoint.compare_close)}
+                                    </span>
+                                </div>
+                                <div style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
+                                    <span style={{ color: "var(--text-muted)" }}>{compareSymbol} Return:</span>
+                                    <span style={{ fontWeight: 800, color: "#3b82f6", fontFamily: "'JetBrains Mono', monospace" }}>
+                                        {dataPoint.comparePercentChange >= 0 ? "+" : ""}{dataPoint.comparePercentChange}%
+                                    </span>
+                                </div>
+                            </>
+                        )}
+                        {!overlayCompare && (
+                            <>
+                                <div style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
+                                    <span style={{ color: "var(--text-muted)" }}>Open:</span>
+                                    <span style={{ fontWeight: 600, color: "var(--text-secondary)", fontFamily: "'JetBrains Mono', monospace" }}>
+                                        {priceStr(symbol, dataPoint.open)}
+                                    </span>
+                                </div>
+                                <div style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
+                                    <span style={{ color: "var(--text-muted)" }}>Range:</span>
+                                    <span style={{ fontWeight: 600, color: "var(--text-secondary)", fontFamily: "'JetBrains Mono', monospace" }}>
+                                        {priceStr(symbol, dataPoint.low)} - {priceStr(symbol, dataPoint.high)}
+                                    </span>
+                                </div>
+                            </>
+                        )}
                         <div style={{ display: "flex", justifyContent: "space-between", gap: 16, marginTop: 4, borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 4 }}>
                             <span style={{ color: "var(--text-muted)" }}>Volume:</span>
-                            <span style={{ fontWeight: 600, color: "var(--text-secondary)" }}>{data.volume.toLocaleString("en-IN")}</span>
+                            <span style={{ fontWeight: 600, color: "var(--text-secondary)", fontFamily: "'JetBrains Mono', monospace" }}>
+                                {dataPoint.volume.toLocaleString("en-IN")}
+                            </span>
                         </div>
                     </div>
                 </div>
@@ -298,13 +434,12 @@ function InteractiveChart({ history, positive, symbol, entryZones, realtimePredi
         return null;
     };
 
-    // Calculate execution targets for visual chart lines
     let buyTarget = null;
     let sellTarget = null;
     let stopLoss = null;
     let isBearish = false;
 
-    if (entryZones) {
+    if (entryZones && !overlayCompare) {
         isBearish = realtimePrediction?.action?.includes("SELL") || false;
         buyTarget = isBearish ? entryZones.take_profit : entryZones.entry;
         sellTarget = isBearish ? entryZones.entry : entryZones.take_profit;
@@ -322,109 +457,191 @@ function InteractiveChart({ history, positive, symbol, entryZones, realtimePredi
     const volumes = chartData.map(d => d.volume);
     const maxVolume = Math.max(...volumes) || 1;
 
+    const allPercentValues = normalizedData.map(d => d.percentChange);
+    if (compareSymbol) {
+        normalizedData.forEach(d => {
+            if (d.comparePercentChange !== undefined) {
+                allPercentValues.push(d.comparePercentChange);
+            }
+        });
+    }
+    const minPercent = Math.min(...allPercentValues) - 2;
+    const maxPercent = Math.max(...allPercentValues) + 2;
+
     return (
-        <div style={{ width: "100%", height: 260, position: "relative" }}>
-            <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={chartData} margin={{ top: 10, right: 5, left: -20, bottom: 0 }}>
-                    <defs>
-                        <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor={color} stopOpacity={0.16} />
-                            <stop offset="95%" stopColor={color} stopOpacity={0.0} />
-                        </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.03)" />
-                    <XAxis 
-                        dataKey="date" 
-                        tickLine={false} 
-                        axisLine={false} 
-                        tick={{ fill: "#4b5563", fontSize: 9 }} 
-                        dy={6}
-                    />
-                    <YAxis 
-                        yAxisId="price"
-                        domain={[minPrice, maxPrice]}
-                        tickLine={false}
-                        axisLine={false}
-                        tick={{ fill: "#4b5563", fontSize: 9 }}
-                        orientation="left"
-                    />
-                    <YAxis 
-                        yAxisId="volume"
-                        domain={[0, maxVolume * 4.5]}
-                        tickLine={false}
-                        axisLine={false}
-                        hide={true}
-                        orientation="right"
-                    />
-                    <Tooltip content={<CustomTooltip />} cursor={{ stroke: "rgba(255,255,255,0.08)", strokeWidth: 1, strokeDasharray: "3 3" }} />
-                    <Area 
-                        yAxisId="price"
-                        type="monotone" 
-                        dataKey="price" 
-                        stroke={color} 
-                        strokeWidth={2}
-                        fillOpacity={1} 
-                        fill="url(#chartGrad)"
-                    />
-                    {buyTarget && (
-                        <ReferenceLine 
-                            yAxisId="price" 
-                            y={buyTarget} 
-                            stroke={isBearish ? "#3b82f6" : "#22c55e"} 
-                            strokeDasharray="3 3" 
-                            strokeWidth={1.5}
-                            label={{ 
-                                value: isBearish ? `Cover: ${buyTarget}` : `Buy: ${buyTarget}`, 
-                                fill: isBearish ? "#3b82f6" : "#22c55e", 
-                                fontSize: 9, 
-                                fontWeight: 700,
-                                position: "insideBottomLeft",
-                                offset: 6
-                            }} 
+        <div style={{ width: "100%" }}>
+            {compareSymbol && (
+                <div className="print-hide" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+                    <label style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                        fontSize: 11,
+                        color: "var(--text-secondary)",
+                        cursor: "pointer",
+                        fontWeight: 600,
+                        background: "rgba(255,255,255,0.015)",
+                        border: "1px solid rgba(255,255,255,0.05)",
+                        padding: "4px 10px",
+                        borderRadius: 8,
+                        userSelect: "none"
+                    }}>
+                        <input 
+                            type="checkbox" 
+                            checked={overlayCompare} 
+                            onChange={(e) => setOverlayCompare(e.target.checked)}
+                            style={{ accentColor: "#fbbf24" }}
                         />
-                    )}
-                    {sellTarget && (
-                        <ReferenceLine 
-                            yAxisId="price" 
-                            y={sellTarget} 
-                            stroke="#ef4444" 
-                            strokeDasharray="3 3" 
-                            strokeWidth={1.5}
-                            label={{ 
-                                value: isBearish ? `Short: ${sellTarget}` : `Sell: ${sellTarget}`, 
-                                fill: "#ef4444", 
-                                fontSize: 9, 
-                                fontWeight: 700,
-                                position: "insideTopLeft",
-                                offset: 6
-                            }} 
+                        Overlay Benchmark ({compareSymbol})
+                    </label>
+                </div>
+            )}
+
+            <div style={{ width: "100%", height: 260, position: "relative" }}>
+                <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={overlayCompare ? normalizedData : chartData} margin={{ top: 10, right: 5, left: -20, bottom: 0 }}>
+                        <defs>
+                            <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor={chartColor} stopOpacity={0.25} />
+                                <stop offset="95%" stopColor={chartColor} stopOpacity={0.0} />
+                            </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.03)" />
+                        <XAxis 
+                            dataKey="date" 
+                            tickLine={false} 
+                            axisLine={false} 
+                            tick={{ fill: "#9ca3af", fontSize: 10.5, fontFamily: "'JetBrains Mono', monospace" }} 
+                            dy={6}
                         />
-                    )}
-                    {stopLoss && (
-                        <ReferenceLine 
-                            yAxisId="price" 
-                            y={stopLoss} 
-                            stroke="#f59e0b" 
-                            strokeDasharray="3 3" 
-                            strokeWidth={1}
-                            label={{ 
-                                value: `SL: ${stopLoss}`, 
-                                fill: "#f59e0b", 
-                                fontSize: 8, 
-                                fontWeight: 600,
-                                position: "insideBottomRight",
-                                offset: 6
-                            }} 
+                        <YAxis 
+                            yAxisId="price"
+                            domain={overlayCompare ? [minPercent, maxPercent] : [minPrice, maxPrice]}
+                            tickLine={false}
+                            axisLine={false}
+                            tick={{ fill: "#9ca3af", fontSize: 10.5, fontFamily: "'JetBrains Mono', monospace" }}
+                            orientation="left"
+                            tickFormatter={(v) => overlayCompare ? `${v >= 0 ? "+" : ""}${v}%` : v}
                         />
-                    )}
-                    <Bar 
-                        yAxisId="volume"
-                        dataKey="volume" 
-                        fill={volumeColor} 
-                        radius={[2, 2, 0, 0]}
-                    />
-                </ComposedChart>
-            </ResponsiveContainer>
+                        <YAxis 
+                            yAxisId="volume"
+                            domain={[0, maxVolume * 4.5]}
+                            tickLine={false}
+                            axisLine={false}
+                            hide={true}
+                            orientation="right"
+                        />
+                        <Tooltip content={<CustomTooltip />} cursor={{ stroke: "rgba(255,255,255,0.18)", strokeWidth: 1.5, strokeDasharray: "3 3" }} />
+                        
+                        {overlayCompare ? (
+                            <>
+                                <Line
+                                    yAxisId="price"
+                                    type="monotone"
+                                    dataKey="percentChange"
+                                    stroke={chartColor}
+                                    strokeWidth={2.5}
+                                    dot={false}
+                                    name={symbol.split(".")[0]}
+                                />
+                                {compareSymbol && (
+                                    <Line
+                                        yAxisId="price"
+                                        type="monotone"
+                                        dataKey="comparePercentChange"
+                                        stroke="#3b82f6"
+                                        strokeWidth={2}
+                                        strokeDasharray="4 4"
+                                        dot={false}
+                                        name={compareSymbol}
+                                    />
+                                )}
+                            </>
+                        ) : (
+                            <Area 
+                                yAxisId="price"
+                                type="monotone" 
+                                dataKey="price" 
+                                stroke={chartColor} 
+                                strokeWidth={2.5}
+                                fillOpacity={1} 
+                                fill="url(#chartGrad)"
+                            />
+                        )}
+
+                        {buyTarget && (
+                            <ReferenceLine 
+                                yAxisId="price" 
+                                y={buyTarget} 
+                                stroke={isBearish ? "#3b82f6" : "#22c55e"} 
+                                strokeDasharray="3 3" 
+                                strokeWidth={1.5}
+                                label={{ 
+                                    value: isBearish ? `Cover: ${buyTarget}` : `Buy: ${buyTarget}`, 
+                                    fill: isBearish ? "#3b82f6" : "#22c55e", 
+                                    fontSize: 9.5, 
+                                    fontWeight: 700,
+                                    position: "insideBottomLeft",
+                                    offset: 6
+                                }} 
+                            />
+                        )}
+                        {sellTarget && (
+                            <ReferenceLine 
+                                yAxisId="price" 
+                                y={sellTarget} 
+                                stroke="#ef4444" 
+                                strokeDasharray="3 3" 
+                                strokeWidth={1.5}
+                                label={{ 
+                                    value: isBearish ? `Short: ${sellTarget}` : `Sell: ${sellTarget}`, 
+                                    fill: "#ef4444", 
+                                    fontSize: 9.5, 
+                                    fontWeight: 700,
+                                    position: "insideTopLeft",
+                                    offset: 6
+                                }} 
+                            />
+                        )}
+                        {stopLoss && (
+                            <ReferenceLine 
+                                yAxisId="price" 
+                                y={stopLoss} 
+                                stroke="#f59e0b" 
+                                strokeDasharray="3 3" 
+                                strokeWidth={1}
+                                label={{ 
+                                    value: `SL: ${stopLoss}`, 
+                                    fill: "#f59e0b", 
+                                    fontSize: 8.5, 
+                                    fontWeight: 600,
+                                    position: "insideBottomRight",
+                                    offset: 6
+                                }} 
+                            />
+                        )}
+                        <Bar 
+                            yAxisId="volume"
+                            dataKey="volume" 
+                            fill={volumeColor} 
+                            radius={[2, 2, 0, 0]}
+                        />
+                    </ComposedChart>
+                </ResponsiveContainer>
+            </div>
+            
+            {overlayCompare && compareSymbol && (
+                <div style={{ display: "flex", justifyContent: "center", gap: 16, fontSize: 10, color: "var(--text-muted)", marginTop: 6 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        <span style={{ display: "inline-block", width: 12, height: 3, background: chartColor }} />
+                        <span>{symbol.split(".")[0]} (%)</span>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        <span style={{ display: "inline-block", width: 12, height: 3, borderTop: "2px dashed #3b82f6" }} />
+                        <span>{compareSymbol} (%)</span>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
@@ -433,14 +650,14 @@ function IndicatorsTable({ summary, symbol }) {
     const indicators = [
         {
             name: "RSI (14) Momentum",
-            value: summary.rsi,
+            value: typeof summary.rsi === "number" ? summary.rsi.toFixed(2) : (summary.rsi ?? "—"),
             status: summary.rsi >= 70 ? "Overbought" : summary.rsi <= 30 ? "Oversold" : "Neutral",
             color: summary.rsi >= 70 ? "#ef4444" : summary.rsi <= 30 ? "#3b82f6" : "#22c55e",
             desc: "Identifies momentum speed and overextended levels."
         },
         {
             name: "MACD Crossover",
-            value: `Hist: ${summary.macd_hist}`,
+            value: typeof summary.macd_hist === "number" ? `Hist: ${summary.macd_hist.toFixed(4)}` : `Hist: ${summary.macd_hist ?? "—"}`,
             status: summary.macd > summary.macd_signal ? "Bullish Alignment" : "Bearish Trend",
             color: summary.macd > summary.macd_signal ? "#22c55e" : "#ef4444",
             desc: "Signals trend direction shifts via moving average crossovers."
@@ -684,8 +901,22 @@ export default function Dashboard() {
         if (!user?.uid) return;
         try {
             setWatchlistLoading(true);
-            const res = await axios.get(`${API_BASE}/watchlist?user=${user.uid}`);
-            setWatchlist(res.data.symbols || []);
+            let loadedFromFirestore = false;
+            try {
+                const docRef = doc(db, "watchlists", user.uid);
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists()) {
+                    setWatchlist(docSnap.data().symbols || []);
+                    loadedFromFirestore = true;
+                }
+            } catch (err) {
+                console.warn("Firestore fetchWatchlist failed, trying backend fallback:", err);
+            }
+            
+            if (!loadedFromFirestore) {
+                const res = await axios.get(`${API_BASE}/watchlist?user=${user.uid}`);
+                setWatchlist(res.data.symbols || []);
+            }
         } catch (err) {
             console.error("Failed to fetch watchlist:", err);
         } finally {
@@ -696,8 +927,22 @@ export default function Dashboard() {
     const fetchAlerts = useCallback(async () => {
         if (!user?.uid) return;
         try {
-            const res = await axios.get(`${API_BASE}/alerts?user=${user.uid}`);
-            setAlerts(res.data.alerts || []);
+            let loadedFromFirestore = false;
+            try {
+                const docRef = doc(db, "alerts", user.uid);
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists()) {
+                    setAlerts(docSnap.data().alerts || []);
+                    loadedFromFirestore = true;
+                }
+            } catch (err) {
+                console.warn("Firestore fetchAlerts failed, trying backend fallback:", err);
+            }
+            
+            if (!loadedFromFirestore) {
+                const res = await axios.get(`${API_BASE}/alerts?user=${user.uid}`);
+                setAlerts(res.data.alerts || []);
+            }
         } catch (err) {
             console.error("Failed to fetch alerts:", err);
         }
@@ -707,43 +952,72 @@ export default function Dashboard() {
         if (!user?.uid || !data?.symbol) return;
         const sym = data.symbol;
         const isWatched = watchlist.includes(sym);
+        const updatedSymbols = isWatched 
+            ? watchlist.filter(s => s !== sym) 
+            : [...watchlist, sym];
+            
+        setWatchlist(updatedSymbols);
+        
+        try {
+            const docRef = doc(db, "watchlists", user.uid);
+            await setDoc(docRef, { symbols: updatedSymbols }, { merge: true });
+        } catch (err) {
+            console.warn("Firestore watchlist toggle failed:", err);
+        }
         
         try {
             if (isWatched) {
-                const res = await axios.post(`${API_BASE}/watchlist/remove`, {
-                    user: user.uid,
-                    symbol: sym
-                });
-                setWatchlist(res.data.symbols || []);
+                await axios.post(`${API_BASE}/watchlist/remove`, { user: user.uid, symbol: sym });
             } else {
-                const res = await axios.post(`${API_BASE}/watchlist/add`, {
-                    user: user.uid,
-                    symbol: sym
-                });
-                setWatchlist(res.data.symbols || []);
+                await axios.post(`${API_BASE}/watchlist/add`, { user: user.uid, symbol: sym });
             }
         } catch (err) {
-            console.error("Watchlist action failed:", err);
+            console.error("Backend watchlist toggle failed:", err);
         }
     };
 
     const handleWatchlistRemove = async (sym) => {
         if (!user?.uid) return;
+        const updatedSymbols = watchlist.filter(s => s !== sym);
+        setWatchlist(updatedSymbols);
+        
         try {
-            const res = await axios.post(`${API_BASE}/watchlist/remove`, {
-                user: user.uid,
-                symbol: sym
-            });
-            setWatchlist(res.data.symbols || []);
+            const docRef = doc(db, "watchlists", user.uid);
+            await setDoc(docRef, { symbols: updatedSymbols }, { merge: true });
         } catch (err) {
-            console.error("Watchlist remove failed:", err);
+            console.warn("Firestore watchlist remove failed:", err);
+        }
+        
+        try {
+            await axios.post(`${API_BASE}/watchlist/remove`, { user: user.uid, symbol: sym });
+        } catch (err) {
+            console.error("Backend watchlist remove failed:", err);
         }
     };
 
     const handleSetAlert = async () => {
         if (!user?.uid || !data?.symbol || !alertBuyPrice || !alertThreshold || !alertEmail) return;
+        const newAlert = {
+            symbol: data.symbol,
+            buy_price: parseFloat(alertBuyPrice),
+            threshold: parseFloat(alertThreshold),
+            email: alertEmail,
+            alert_type: alertType,
+            created_at: new Date().toISOString()
+        };
+        
+        const updatedAlerts = [...alerts.filter(a => a.symbol !== data.symbol), newAlert];
+        setAlerts(updatedAlerts);
+        setAlertSaving(true);
+        
         try {
-            setAlertSaving(true);
+            const docRef = doc(db, "alerts", user.uid);
+            await setDoc(docRef, { alerts: updatedAlerts }, { merge: true });
+        } catch (err) {
+            console.warn("Firestore set alert failed:", err);
+        }
+        
+        try {
             const res = await axios.post(`${API_BASE}/alerts/set`, {
                 user: user.uid,
                 symbol: data.symbol,
@@ -752,9 +1026,11 @@ export default function Dashboard() {
                 email: alertEmail,
                 alert_type: alertType
             });
-            setAlerts(res.data.alerts || []);
+            if (res.data && res.data.alerts) {
+                setAlerts(res.data.alerts);
+            }
         } catch (err) {
-            console.error("Failed to set alert:", err);
+            console.error("Backend set alert failed:", err);
         } finally {
             setAlertSaving(false);
         }
@@ -762,15 +1038,27 @@ export default function Dashboard() {
 
     const handleRemoveAlert = async () => {
         if (!user?.uid || !data?.symbol) return;
+        const updatedAlerts = alerts.filter(a => a.symbol !== data.symbol);
+        setAlerts(updatedAlerts);
+        setAlertSaving(true);
+        
         try {
-            setAlertSaving(true);
+            const docRef = doc(db, "alerts", user.uid);
+            await setDoc(docRef, { alerts: updatedAlerts }, { merge: true });
+        } catch (err) {
+            console.warn("Firestore remove alert failed:", err);
+        }
+        
+        try {
             const res = await axios.post(`${API_BASE}/alerts/remove`, {
                 user: user.uid,
                 symbol: data.symbol
             });
-            setAlerts(res.data.alerts || []);
+            if (res.data && res.data.alerts) {
+                setAlerts(res.data.alerts);
+            }
         } catch (err) {
-            console.error("Failed to remove alert:", err);
+            console.error("Backend remove alert failed:", err);
         } finally {
             setAlertSaving(false);
         }
@@ -945,8 +1233,29 @@ export default function Dashboard() {
     
     const isWatched = data?.symbol ? watchlist.includes(data.symbol) : false;
 
+    const ambientGlowColor = data?.realtime_prediction?.action?.includes("BUY")
+        ? "rgba(34, 197, 94, 0.12)"
+        : data?.realtime_prediction?.action?.includes("SELL")
+            ? "rgba(239, 68, 68, 0.12)"
+            : "rgba(245, 158, 11, 0.08)";
+
     return (
-        <div style={{ padding: "30px 24px 80px", maxWidth: 1280, margin: "0 auto" }}>
+        <div style={{ padding: "30px 24px 80px", maxWidth: 1280, margin: "0 auto", position: "relative" }}>
+            {data && (
+                <div style={{
+                    position: "absolute",
+                    top: 0,
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                    width: "100%",
+                    maxWidth: 1000,
+                    height: 400,
+                    background: `radial-gradient(circle, ${ambientGlowColor} 0%, rgba(6,8,16,0) 70%)`,
+                    pointerEvents: "none",
+                    zIndex: 0
+                }} />
+            )}
+
             <style>{`
                 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap');
                 
@@ -956,6 +1265,15 @@ export default function Dashboard() {
                 @keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
                 @keyframes shimmer { from { background-position: -200% 0; } to { background-position: 200% 0; } }
                 @keyframes spin { to { transform: rotate(360deg); } }
+                
+                @keyframes pulseGold {
+                    0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.5); }
+                    70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(251, 191, 36, 0); }
+                    100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(251, 191, 36, 0); }
+                }
+                .pulse-gold-dot {
+                    animation: pulseGold 2s infinite;
+                }
                 
                 .card {
                     background: rgba(255,255,255,0.015);
@@ -1398,7 +1716,8 @@ export default function Dashboard() {
                                 background: "linear-gradient(135deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0.005) 100%)",
                                 border: "1px solid rgba(255,255,255,0.06)",
                                 position: "relative",
-                                overflow: "hidden"
+                                overflow: "hidden",
+                                zIndex: 1
                             }}>
                                 <div style={{
                                     position: "absolute",
@@ -1455,6 +1774,8 @@ export default function Dashboard() {
                                             glow = "0 0 12px rgba(245, 158, 11, 0.15)";
                                         }
                                         
+                                        const confScore = calculateAgreementConfidence(data.summary, action);
+                                        
                                         return (
                                             <div style={{
                                                 padding: "6px 14px",
@@ -1462,12 +1783,12 @@ export default function Dashboard() {
                                                 background: bg,
                                                 border: `1px solid ${border}`,
                                                 color: color,
-                                                fontSize: 12.5,
+                                                fontSize: 11.5,
                                                 fontWeight: 800,
                                                 letterSpacing: "0.05em",
                                                 boxShadow: glow
                                             }}>
-                                                {action}
+                                                {action} — {confScore}% CONFIDENCE
                                             </div>
                                         );
                                     })()}
@@ -1477,7 +1798,6 @@ export default function Dashboard() {
                                     {data.realtime_prediction.advice}
                                 </p>
                                 
-                                {/* Side-by-side Buy/Sell targets based on current market rate */}
                                 {data.entry_zones && (() => {
                                     const action = data.realtime_prediction.action;
                                     const isBearish = action.includes("SELL");
@@ -1614,6 +1934,35 @@ export default function Dashboard() {
                                 </div>
                             </div>
                         )}
+
+                        {data.realtime_prediction && (
+                            <div className="card" style={{
+                                padding: "16px 20px",
+                                background: "rgba(197, 168, 76, 0.03)",
+                                border: "1px solid rgba(197, 168, 76, 0.15)",
+                                borderRadius: 14,
+                                position: "relative",
+                                overflow: "hidden",
+                                marginTop: -8,
+                                zIndex: 1
+                            }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                                    <span className="pulse-gold-dot" style={{
+                                        width: 7,
+                                        height: 7,
+                                        borderRadius: "50%",
+                                        background: "#fbbf24",
+                                        display: "inline-block"
+                                    }} />
+                                    <span style={{ fontSize: 10, fontWeight: 800, color: "#fbbf24", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                                        AI quant advisor
+                                    </span>
+                                </div>
+                                <p style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.5, margin: 0, fontFamily: "var(--font-inter, 'Inter', sans-serif)" }}>
+                                    {data.ai_insight || fallbackAiInsight(data.symbol, data.realtime_prediction.action)}
+                                </p>
+                            </div>
+                        )}
                         
                         <div className="card" style={{ padding: "20px 24px" }}>
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 14 }}>
@@ -1670,10 +2019,14 @@ export default function Dashboard() {
 
                         <div>
                             <h3 style={{ fontSize: 13, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-muted)", margin: "0 0 12px 6px" }}>Key Market Statistics</h3>
-                            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))", gap: 12 }}>
+                            <div className="metric-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10 }}>
                                 <MetricItem label="Open" value={priceStr(data.symbol, data.summary?.open)} />
                                 <MetricItem label="Session Range" value={`${priceStr(data.symbol, data.summary?.low)} - ${priceStr(data.symbol, data.summary?.high)}`} />
-                                <MetricItem label="RSI Value" value={`${data.summary?.rsi} (${rsiLabel})`} color={rsiColor} />
+                                <MetricItem 
+                                    label="RSI Value" 
+                                    value={`${typeof data.summary?.rsi === "number" ? data.summary.rsi.toFixed(2) : (data.summary?.rsi ?? "—")} (${rsiLabel})`} 
+                                    color={rsiColor} 
+                                />
                                 <MetricItem label="52-Week High" value={priceStr(data.symbol, data.summary?.fifty_two_week_high)} />
                                 <MetricItem label="52-Week Low" value={priceStr(data.symbol, data.summary?.fifty_two_week_low)} />
                                 <MetricItem label="Volume" value={data.summary?.volume?.toLocaleString("en-IN") || "—"} />

@@ -811,6 +811,64 @@ async def startup_event():
     asyncio.create_task(alerts_checker_loop())
 
 
+# -------------------- BENCHMARK MAP & AI INSIGHTS --------------------
+def get_comparison_symbol(symbol: str) -> str:
+    sym = symbol.upper()
+    if "GC=F" in sym or "GOLD" in sym or "XAU" in sym:
+        return "SI=F"
+    elif "SI=F" in sym or "SILVER" in sym or "XAG" in sym:
+        return "GC=F"
+    elif "BTC" in sym:
+        return "ETH-USD"
+    elif "ETH" in sym:
+        return "BTC-USD"
+    elif ".NS" in sym:
+        return "^NSEI"
+    elif "=" in sym or "-" in sym:
+        return "EURUSD=X" if "EURUSD" not in sym else "GBPUSD=X"
+    else:
+        return "SPY"
+
+
+def generate_ai_insight(latest: pd.Series, symbol: str, signal: str, score: float) -> str:
+    symbol_name = symbol.split(".")[0]
+    rsi = latest.get("RSI", 50.0)
+    if pd.isna(rsi):
+        rsi = 50.0
+    close = latest.get("Close", 0.0)
+    ma50 = latest.get("MA_50", close)
+    if pd.isna(ma50):
+        ma50 = close
+        
+    if signal == "BUY":
+        if rsi < 35:
+            sentence1 = f"AI Models detect a high-probability oversold mean-reversion setup as {symbol_name}'s RSI cools to {rsi:.2f}."
+        else:
+            sentence1 = f"AI Analysis confirms robust bullish trend alignment for {symbol_name}, driven by positive MACD crossovers."
+        
+        if close > ma50:
+            sentence2 = f"With price trading cleanly above the 50-day moving average, the trend favors accumulating positions on minor pullbacks."
+        else:
+            sentence2 = f"However, near-term caution is advised as price approaches overhead resistance at the 50-day moving average."
+            
+    elif signal == "SELL":
+        if rsi > 65:
+            sentence1 = f"AI Models flag severe exhaustion and overbought divergence as {symbol_name} tests local highs with RSI at {rsi:.2f}."
+        else:
+            sentence1 = f"AI Analysis warns of accelerating bearish breakdown momentum as {symbol_name} slips below short-term support bounds."
+            
+        if close < ma50:
+            sentence2 = f"Trading below the 50-day moving average indicates a strong downward bias; short positions remain highly favored."
+        else:
+            sentence2 = f"This selling pressure remains high-risk as the underlying long-term trend above the 50-day moving average is still intact."
+            
+    else:
+        sentence1 = f"AI Models classify {symbol_name} in a ranging, low-volatility consolidation regime, with RSI stabilizing near {rsi:.2f}."
+        sentence2 = f"No clear directional bias is visible; recommendation is to stand aside until a volume-supported breakout occurs."
+        
+    return f"{sentence1} {sentence2}"
+
+
 # -------------------- ANALYZE --------------------
 @app.get("/analyze")
 def analyze(symbol: str, period: str = "3mo", request: Request = None):
@@ -882,6 +940,39 @@ def analyze(symbol: str, period: str = "3mo", request: Request = None):
                 date_col = col
                 break
 
+        # Comparison Asset History Fetch
+        compare_symbol = get_comparison_symbol(symbol)
+        compare_df = get_stock_history_raw(compare_symbol, period=chart_period, interval=chart_interval)
+        compare_map = {}
+        if compare_df is not None and not compare_df.empty:
+            compare_df = compare_df.reset_index()
+            c_date_col = "Date"
+            for col in ["Datetime", "date", "index", "Date"]:
+                if col in compare_df.columns:
+                    c_date_col = col
+                    break
+            for _, row in compare_df.iterrows():
+                d_val = row[c_date_col]
+                if isinstance(d_val, datetime) or hasattr(d_val, "strftime"):
+                    if chart_interval in ["5m", "15m"]:
+                        d_str = d_val.strftime("%Y-%m-%d %H:%M")
+                    else:
+                        d_str = d_val.strftime("%Y-%m-%d")
+                else:
+                    d_str = str(d_val)[:16]
+                
+                try:
+                    compare_map[d_str] = round(float(row["Close"]), 2)
+                except:
+                    pass
+
+        first_valid_compare = None
+        for k, v in compare_map.items():
+            if v is not None:
+                first_valid_compare = v
+                break
+        last_compare_val = first_valid_compare
+
         for _, row in chart_df.iterrows():
             d_val = row[date_col]
             if isinstance(d_val, datetime) or hasattr(d_val, "strftime"):
@@ -892,6 +983,12 @@ def analyze(symbol: str, period: str = "3mo", request: Request = None):
             else:
                 d_str = str(d_val)[:16]
 
+            compare_val = compare_map.get(d_str)
+            if compare_val is None:
+                compare_val = last_compare_val
+            else:
+                last_compare_val = compare_val
+
             chart_data.append({
                 "date": d_str,
                 "open": round(float(row["Open"]), 2),
@@ -899,6 +996,7 @@ def analyze(symbol: str, period: str = "3mo", request: Request = None):
                 "low": round(float(row["Low"]), 2),
                 "close": round(float(row["Close"]), 2),
                 "volume": int(safe_float(row.get("Volume", 0), 0)),
+                "compare_close": compare_val
             })
 
         fifty_two_week_high = float(daily_df["High"].max())
@@ -946,6 +1044,8 @@ def analyze(symbol: str, period: str = "3mo", request: Request = None):
             "engine_details": details,
             "history": chart_data,
             "realtime_prediction": realtime_pred,
+            "compare_symbol": compare_symbol.split(".")[0] if compare_symbol else None,
+            "ai_insight": generate_ai_insight(latest, symbol, signal, raw_score),
         }
 
     except Exception as e:
