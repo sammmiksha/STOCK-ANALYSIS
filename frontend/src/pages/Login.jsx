@@ -1,16 +1,11 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Navigate } from "react-router-dom";
-import { 
-    signInWithEmailAndPassword, 
-    createUserWithEmailAndPassword, 
-    signInWithPopup, 
-    GoogleAuthProvider 
-} from "firebase/auth";
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
 import { auth } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 import Logo from "../components/Logo";
 
-// ── Animated SVG Line Chart ───────────────────────────────────────────────────
+// ── Animated SVG Line Chart for the Hero Panel ────────────────────────────────
 function LiveChart() {
     const [hoverIdx, setHoverIdx] = useState(null);
     const [offset, setOffset] = useState(0);
@@ -39,27 +34,33 @@ function LiveChart() {
 
     useEffect(() => {
         let frame;
-        const tick = () => { setOffset(o => (o + 0.3) % 40); frame = requestAnimationFrame(tick); };
+        const tick = () => { setOffset(o => (o + 0.25) % 40); frame = requestAnimationFrame(tick); };
         frame = requestAnimationFrame(tick);
         return () => cancelAnimationFrame(frame);
     }, []);
 
-    const lastX = xS(vals.length - 1);
-    const lastY = yS(vals[vals.length - 1]);
-
     return (
-        <div style={{ position: "relative", width: "100%" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+        <div style={{
+            position: "relative",
+            width: "100%",
+            background: "rgba(10, 15, 30, 0.45)",
+            border: "1px solid rgba(255, 255, 255, 0.05)",
+            borderRadius: "16px",
+            padding: "20px 24px",
+            boxShadow: "0 20px 50px rgba(0, 0, 0, 0.3)",
+            backdropFilter: "blur(12px)",
+        }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
                 <div>
-                    <div style={{ color: "#6b7280", fontSize: "11px", letterSpacing: "0.06em", textTransform: "uppercase" }}>RELIANCE · NSE</div>
-                    <div style={{ color: "white", fontSize: "22px", fontWeight: "700", letterSpacing: "-0.5px" }}>₹2,847.35</div>
+                    <div style={{ color: "#9ca3af", fontSize: "11px", letterSpacing: "0.06em", textTransform: "uppercase", fontFamily: "'JetBrains Mono', monospace" }}>RELIANCE · NSE</div>
+                    <div style={{ color: "white", fontSize: "24px", fontWeight: "800", letterSpacing: "-0.5px" }}>₹2,847.35</div>
                 </div>
                 <div style={{ textAlign: "right" }}>
                     <div style={{
-                        background: "rgba(34,197,94,0.15)", border: "1px solid rgba(34,197,94,0.3)",
-                        color: "#22c55e", padding: "3px 10px", borderRadius: "6px", fontSize: "13px", fontWeight: "700",
+                        background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.25)",
+                        color: "#22c55e", padding: "4px 10px", borderRadius: "6px", fontSize: "12.5px", fontWeight: "700",
                     }}>▲ +1.84%</div>
-                    <div style={{ color: "#4b5563", fontSize: "11px", marginTop: "3px" }}>Today</div>
+                    <div style={{ color: "#6b7280", fontSize: "10.5px", marginTop: "4px" }}>Today</div>
                 </div>
             </div>
 
@@ -71,7 +72,7 @@ function LiveChart() {
                         <stop offset="100%" stopColor="#22c55e" stopOpacity="0" />
                     </linearGradient>
                     <filter id="lineGlow">
-                        <feGaussianBlur stdDeviation="2" result="blur" />
+                        <feGaussianBlur stdDeviation="3" result="blur" />
                         <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
                     </filter>
                     <pattern id="shimmer" x={offset} y="0" width="40" height={H} patternUnits="userSpaceOnUse">
@@ -80,11 +81,11 @@ function LiveChart() {
                 </defs>
                 {[0.25, 0.5, 0.75].map((f, i) => (
                     <line key={i} x1={padL} y1={padT + innerH * f} x2={W - padR} y2={padT + innerH * f}
-                        stroke="rgba(255,255,255,0.04)" strokeWidth="1" />
+                        stroke="rgba(255,255,255,0.03)" strokeWidth="1" />
                 ))}
                 <path d={area} fill="url(#areaGrad)" />
                 <path d={area} fill="url(#shimmer)" />
-                <polyline points={pts} fill="none" stroke="#22c55e" strokeWidth="2"
+                <polyline points={pts} fill="none" stroke="#22c55e" strokeWidth="2.5"
                     strokeLinejoin="round" filter="url(#lineGlow)" />
                 {vals.map((v, i) => (
                     <rect key={i} x={xS(i) - innerW / vals.length / 2} y={padT}
@@ -96,25 +97,15 @@ function LiveChart() {
                     <g>
                         <line x1={xS(hoverIdx)} y1={padT} x2={xS(hoverIdx)} y2={H - padB}
                             stroke="rgba(34,197,94,0.4)" strokeWidth="1" strokeDasharray="3,3" />
-                        <circle cx={xS(hoverIdx)} cy={yS(vals[hoverIdx])} r="4" fill="#22c55e" filter="url(#lineGlow)" />
-                        <rect x={Math.min(xS(hoverIdx) - 36, W - 80)} y={yS(vals[hoverIdx]) - 28}
-                            width="76" height="22" rx="5" fill="#1a2235" stroke="rgba(34,197,94,0.35)" strokeWidth="1" />
-                        <text x={Math.min(xS(hoverIdx), W - 42) + 2} y={yS(vals[hoverIdx]) - 13}
-                            textAnchor="middle" fill="#22c55e" fontSize="11" fontWeight="600">
-                            ₹{vals[hoverIdx].toLocaleString("en-IN")}
+                        <circle cx={xS(hoverIdx)} cy={yS(vals[hoverIdx])} r="5" fill="#22c55e" filter="url(#lineGlow)" />
+                        <rect x={Math.min(xS(hoverIdx) - 36, W - 80)} y={yS(vals[hoverIdx]) - 32}
+                            width="76" height="22" rx="5" fill="#0c0f1d" stroke="rgba(34,197,94,0.35)" strokeWidth="1" />
+                        <text x={Math.min(xS(hoverIdx), W - 42) + 2} y={yS(vals[hoverIdx]) - 17}
+                            textAnchor="middle" fill="#22c55e" fontSize="11" fontWeight="700" fontFamily="'JetBrains Mono', monospace">
+                            ₹{vals[hoverIdx]}
                         </text>
                     </g>
                 )}
-                <circle cx={lastX} cy={lastY} r="5" fill="#22c55e" filter="url(#lineGlow)" />
-                <circle cx={lastX} cy={lastY} r="9" fill="none" stroke="#22c55e" strokeOpacity="0.4" strokeWidth="1.5">
-                    <animate attributeName="r" values="6;13;6" dur="2s" repeatCount="indefinite" />
-                    <animate attributeName="stroke-opacity" values="0.5;0;0.5" dur="2s" repeatCount="indefinite" />
-                </circle>
-                {[0, 3, 6, 9, 12].map(i => (
-                    <text key={i} x={xS(i)} y={H - 4} textAnchor="middle" fill="#374151" fontSize="9">
-                        {priceData[i].t}
-                    </text>
-                ))}
             </svg>
         </div>
     );
@@ -124,53 +115,48 @@ export default function Login() {
     const { user, loading: authLoading } = useAuth();
     const navigate = useNavigate();
     
+    const [isSignUp, setIsSignUp] = useState(false);
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
-    const [confirmPassword, setConfirmPassword] = useState("");
-    const [isSignUp, setIsSignUp] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
-    const [mounted, setMounted] = useState(false);
 
-    useEffect(() => { 
-        setTimeout(() => setMounted(true), 50); 
-    }, []);
+    useEffect(() => {
+        // Clear error when switching tabs
+        setError("");
+    }, [isSignUp]);
 
     if (!authLoading && user) return <Navigate to="/dashboard" replace />;
 
-    const fi = (delay = 0) => ({
-        opacity: mounted ? 1 : 0,
-        transform: mounted ? "translateY(0)" : "translateY(18px)",
-        transition: `opacity 0.65s ease ${delay}ms, transform 0.65s ease ${delay}ms`,
-    });
-
-    const friendlyError = (code) => {
-        switch (code) {
-            case "auth/user-not-found": return "No account found with this email.";
-            case "auth/wrong-password": return "Incorrect password. Please try again.";
-            case "auth/invalid-email": return "Please enter a valid email address.";
-            case "auth/email-already-in-use": return "This email is already registered. Please sign in.";
-            case "auth/weak-password": return "Password should be at least 6 characters long.";
-            case "auth/too-many-requests": return "Too many attempts. Please wait a moment.";
-            case "auth/user-disabled": return "This account has been disabled.";
-            case "auth/popup-closed-by-user": return "Google sign-in was cancelled.";
-            case "auth/network-request-failed": return "Network error. Check your connection.";
-            default: return "Authentication failed. Please try again.";
-        }
+    const friendly = (code) => {
+        const messages = {
+            "auth/user-not-found": "No account found with this email.",
+            "auth/wrong-password": "Incorrect password.",
+            "auth/invalid-email": "Please enter a valid email address.",
+            "auth/email-already-in-use": "An account already exists with this email address.",
+            "auth/weak-password": "Password must be at least 6 characters.",
+            "auth/invalid-credential": "Invalid email or password.",
+            "auth/too-many-requests": "Too many attempts. Try again later.",
+            "auth/user-disabled": "This account is disabled.",
+            "auth/popup-closed-by-user": "Google sign-in was cancelled.",
+            "auth/network-request-failed": "Network error — check your connection.",
+        };
+        return messages[code] || "Authentication failed. Please try again.";
     };
 
-    const handleEmailAuth = async () => {
-        if (!email || !password) { 
+    const handleAuth = async (e) => {
+        e.preventDefault();
+        if (!email.trim() || !password.trim()) { 
             setError("Please fill in all fields."); 
             return; 
         }
-        if (isSignUp && password !== confirmPassword) {
-            setError("Passwords do not match.");
+        if (password.length < 6) {
+            setError("Password must be at least 6 characters.");
             return;
         }
-        
+
         try {
-            setError("");
+            setError(""); 
             setLoading(true);
             if (isSignUp) {
                 await createUserWithEmailAndPassword(auth, email, password);
@@ -178,330 +164,343 @@ export default function Login() {
                 await signInWithEmailAndPassword(auth, email, password);
             }
             navigate("/dashboard");
-        } catch (err) {
-            setError(friendlyError(err.code));
-        } finally {
-            setLoading(false);
+        } catch (e) { 
+            setError(friendly(e.code)); 
+        } finally { 
+            setLoading(false); 
         }
     };
 
-    const handleGoogleAuth = async () => {
+    const handleGoogleLogin = async () => {
         try {
-            setError("");
+            setError(""); 
             setLoading(true);
-            const provider = new GoogleAuthProvider();
-            await signInWithPopup(auth, provider);
+            await signInWithPopup(auth, new GoogleAuthProvider());
             navigate("/dashboard");
-        } catch (err) {
-            setError(friendlyError(err.code));
-        } finally {
-            setLoading(false);
+        } catch (e) { 
+            setError(friendly(e.code)); 
+        } finally { 
+            setLoading(false); 
         }
     };
 
     return (
-        <div style={{ minHeight: "100vh", background: "#060810", fontFamily: "'Inter', sans-serif", display: "flex", color: "white", overflow: "hidden" }}>
-            <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-            <style>{`
-                *{box-sizing:border-box;margin:0;padding:0}
-                ::placeholder{color:#4b5563!important}
-                input:-webkit-autofill{-webkit-box-shadow:0 0 0 1000px #0a0d18 inset!important;-webkit-text-fill-color:white!important}
-                
-                .auth-tabs {
-                    display: flex;
-                    background: rgba(255,255,255,0.02);
-                    border: 1px solid rgba(255,255,255,0.06);
-                    padding: 3px;
-                    border-radius: 10px;
-                    margin-bottom: 24px;
-                }
-                .auth-tab {
-                    flex: 1;
-                    padding: 8px 12px;
-                    border: none;
-                    background: transparent;
-                    color: #9ca3af;
-                    font-size: 13px;
-                    font-weight: 600;
-                    border-radius: 8px;
-                    cursor: pointer;
-                    transition: all 0.2s;
-                }
-                .auth-tab.active {
-                    background: rgba(34,197,94,0.1);
-                    color: #22c55e;
-                    box-shadow: inset 0 0 0 1px rgba(34,197,94,0.15);
-                }
-                
-                .g-btn{width:100%;padding:12px;border-radius:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:white;font-family:'Inter',sans-serif;font-size:13.5px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:all .2s}
-                .g-btn:hover{background:rgba(255,255,255,0.08);border-color:rgba(255,255,255,0.18);transform:translateY(-1px);box-shadow:0 8px 20px rgba(0,0,0,0.3)}
-                .g-btn:active{transform:translateY(0)}
-                
-                .inp-wrapper {
-                    position: relative;
-                    width: 100%;
-                }
-                .inp-icon {
-                    position: absolute;
-                    left: 14px;
-                    top: 50%;
-                    transform: translateY(-50%);
-                    color: #4b5563;
-                    pointer-events: none;
-                    display: flex;
-                    align-items: center;
-                }
-                .inp{width:100%;padding:13px 16px 13px 40px;border-radius:10px;background:#0d111e;border:1px solid rgba(255,255,255,0.08);color:white;font-family:'Inter',sans-serif;font-size:14px;outline:none;transition:border-color .2s,box-shadow .2s}
-                .inp:hover{border-color:rgba(255,255,255,0.18)}
-                .inp:focus{border-color:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,0.1)}
-                
-                .p-btn{width:100%;padding:14px;border-radius:10px;background:#22c55e;border:none;color:#030a04;font-family:'Inter',sans-serif;font-size:14px;font-weight:700;cursor:pointer;transition:background .2s,transform .15s,box-shadow .2s}
-                .p-btn:hover{background:#16a34a;transform:translateY(-1px);box-shadow:0 8px 28px rgba(34,197,94,0.3)}
-                .p-btn:active{transform:translateY(0)}
-                .p-btn:disabled{opacity:.6;cursor:not-allowed;transform:none}
-                
-                @keyframes spin{to{transform:rotate(360deg)}}
-                .spin{width:14px;height:14px;border:2px solid rgba(0,0,0,0.15);border-top-color:#030a04;border-radius:50%;animation:spin .7s linear infinite;display:inline-block}
-                @keyframes floatY{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
-                .float{animation:floatY 4s ease-in-out infinite}
-                @keyframes tkr{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
-                .tkr{animation:tkr 20s linear infinite;white-space:nowrap;display:flex;gap:0}
-                .tkr:hover{animation-play-state:paused}
-                a{text-decoration:none}
-            `}</style>
-
-            {/* ── Left: Auth Form Column ── */}
+        <div style={{ 
+            minHeight: "100vh", 
+            display: "flex", 
+            background: "#030712",
+            color: "#f3f4f6",
+            fontFamily: "'Inter', sans-serif"
+        }}>
+            {/* ── Left Side: Auth Form ── */}
             <div style={{
-                width: "min(480px, 100%)", flexShrink: 0,
-                display: "flex", flexDirection: "column",
+                width: "min(500px, 100%)", 
+                flexShrink: 0,
+                display: "flex", 
+                flexDirection: "column",
+                padding: "36px 44px",
+                borderRight: "1px solid rgba(255, 255, 255, 0.04)",
                 justifyContent: "space-between",
-                padding: "40px 48px",
-                borderRight: "1px solid rgba(255,255,255,0.06)",
-                position: "relative", zIndex: 10,
-                background: "#060810",
+                background: "linear-gradient(180deg, #030712 0%, #050b18 100%)"
             }}>
                 <div>
-                    <div style={{ marginBottom: 40 }}><Logo /></div>
+                    <Logo />
+                </div>
 
-                    {/* Tabs */}
-                    <div className="auth-tabs" style={fi(50)}>
-                        <button className={`auth-tab ${!isSignUp ? "active" : ""}`} onClick={() => { setIsSignUp(false); setError(""); }}>Sign In</button>
-                        <button className={`auth-tab ${isSignUp ? "active" : ""}`} onClick={() => { setIsSignUp(true); setError(""); }}>Create Account</button>
-                    </div>
-
-                    <h1 style={{ ...fi(100), fontSize: "26px", fontWeight: "800", letterSpacing: "-0.8px", lineHeight: "1.2", marginBottom: "8px" }}>
-                        {isSignUp ? "Get started today" : "Welcome back"}
+                <div style={{ 
+                    maxWidth: 360, 
+                    width: "100%", 
+                    margin: "40px auto"
+                }}>
+                    <h1 style={{ 
+                        fontSize: 26, 
+                        fontWeight: 800, 
+                        letterSpacing: "-0.6px", 
+                        marginBottom: 6,
+                        color: "#f3f4f6"
+                    }}>
+                        {isSignUp ? "Create your account" : "Welcome back"}
                     </h1>
-                    <p style={{ ...fi(130), color: "#6b7280", fontSize: "13.5px", marginBottom: "24px", lineHeight: "1.6" }}>
-                        {isSignUp ? "Create a free account to track watchlist indicators." : "Sign in to access your real-time stock dashboard."}
+                    <p style={{ 
+                        color: "#9ca3af", 
+                        fontSize: 13.5, 
+                        marginBottom: 24,
+                        lineHeight: 1.5
+                    }}>
+                        {isSignUp 
+                            ? "Start monitoring indicators and pinning alerts." 
+                            : "Sign in to access your real-time dashboard."}
                     </p>
 
-                    {/* Google OAuth Button */}
-                    <div style={{ ...fi(160), marginBottom: "16px" }}>
-                        <button className="g-btn" onClick={handleGoogleAuth}>
-                            <GoogleIcon /> Continue with Google
+                    {/* Tabs Segmented Selector */}
+                    <div style={{
+                        display: "flex",
+                        padding: 3,
+                        background: "rgba(255,255,255,0.02)",
+                        border: "1px solid rgba(255,255,255,0.06)",
+                        borderRadius: 10,
+                        marginBottom: 20
+                    }}>
+                        <button 
+                            onClick={() => setIsSignUp(false)}
+                            style={{
+                                flex: 1,
+                                padding: "8px 12px",
+                                border: "none",
+                                borderRadius: 8,
+                                background: !isSignUp ? "rgba(255,255,255,0.06)" : "transparent",
+                                color: !isSignUp ? "#ffffff" : "#9ca3af",
+                                fontSize: 12.5,
+                                fontWeight: 600,
+                                cursor: "pointer",
+                                transition: "all 0.18s ease"
+                            }}
+                        >
+                            Sign In
+                        </button>
+                        <button 
+                            onClick={() => setIsSignUp(true)}
+                            style={{
+                                flex: 1,
+                                padding: "8px 12px",
+                                border: "none",
+                                borderRadius: 8,
+                                background: isSignUp ? "rgba(255,255,255,0.06)" : "transparent",
+                                color: isSignUp ? "#ffffff" : "#9ca3af",
+                                fontSize: 12.5,
+                                fontWeight: 600,
+                                cursor: "pointer",
+                                transition: "all 0.18s ease"
+                            }}
+                        >
+                            Create Account
                         </button>
                     </div>
 
-                    {/* Divider */}
-                    <div style={{ ...fi(190), display: "flex", alignItems: "center", gap: "12px", marginBottom: "16px" }}>
-                        <div style={{ flex: 1, height: "1px", background: "rgba(255,255,255,0.07)" }} />
-                        <span style={{ color: "#4b5563", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.05em" }}>or email</span>
-                        <div style={{ flex: 1, height: "1px", background: "rgba(255,255,255,0.07)" }} />
+                    <button
+                        onClick={handleGoogleLogin}
+                        disabled={loading}
+                        style={{
+                            width: "100%", 
+                            padding: "10px 16px",
+                            display: "flex", 
+                            alignItems: "center", 
+                            justifyContent: "center", 
+                            gap: 10,
+                            marginBottom: 20,
+                            background: "rgba(255,255,255,0.02)",
+                            border: "1px solid rgba(255,255,255,0.07)",
+                            borderRadius: 10,
+                            color: "#e5e7eb",
+                            fontSize: 13,
+                            fontWeight: 600,
+                            cursor: "pointer",
+                            transition: "all 0.15s ease"
+                        }}
+                        className="google-signin-btn"
+                        onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.045)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.02)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)"; }}
+                    >
+                        <GoogleIcon /> Continue with Google
+                    </button>
+
+                    <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+                        <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.06)" }} />
+                        <span style={{ fontSize: 10.5, color: "#4b5563", fontWeight: 700, letterSpacing: "0.05em" }}>OR</span>
+                        <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.06)" }} />
                     </div>
 
-                    {/* Form Inputs */}
-                    <div style={{ ...fi(220), display: "flex", flexDirection: "column", gap: "12px", marginBottom: "14px" }}>
-                        <div className="inp-wrapper">
-                            <span className="inp-icon">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
-                                </svg>
-                            </span>
-                            <input className="inp" type="email" placeholder="Email address" value={email}
-                                onChange={e => { setEmail(e.target.value); setError(""); }}
-                                onKeyDown={e => e.key === "Enter" && document.getElementById("pwd-inp").focus()} />
-                        </div>
-                        
-                        <div className="inp-wrapper">
-                            <span className="inp-icon">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                                </svg>
-                            </span>
-                            <input id="pwd-inp" className="inp" type="password" placeholder="Password" value={password}
-                                onChange={e => { setPassword(e.target.value); setError(""); }}
-                                onKeyDown={e => e.key === "Enter" && (isSignUp ? document.getElementById("confirm-pwd-inp").focus() : handleEmailAuth())} />
-                        </div>
+                    <form onSubmit={handleAuth} style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 16 }}>
+                        <input
+                            className="inp" 
+                            type="email" 
+                            placeholder="Email address" 
+                            value={email}
+                            onChange={e => { setEmail(e.target.value); setError(""); }}
+                            style={{
+                                width: "100%",
+                                boxSizing: "border-box",
+                                padding: "11px 14px",
+                                background: "rgba(255,255,255,0.015)",
+                                border: "1px solid rgba(255,255,255,0.06)",
+                                borderRadius: 10,
+                                color: "#f3f4f6",
+                                fontSize: 13,
+                                outline: "none",
+                                transition: "all 0.15s ease"
+                            }}
+                            onFocus={e => { e.target.style.borderColor = "rgba(34,197,94,0.4)"; e.target.style.boxShadow = "0 0 0 3px rgba(34,197,94,0.08)"; }}
+                            onBlur={e => { e.target.style.borderColor = "rgba(255,255,255,0.06)"; e.target.style.boxShadow = "none"; }}
+                        />
+                        <input
+                            className="inp" 
+                            type="password" 
+                            placeholder="Password" 
+                            value={password}
+                            onChange={e => { setPassword(e.target.value); setError(""); }}
+                            style={{
+                                width: "100%",
+                                boxSizing: "border-box",
+                                padding: "11px 14px",
+                                background: "rgba(255,255,255,0.015)",
+                                border: "1px solid rgba(255,255,255,0.06)",
+                                borderRadius: 10,
+                                color: "#f3f4f6",
+                                fontSize: 13,
+                                outline: "none",
+                                transition: "all 0.15s ease"
+                            }}
+                            onFocus={e => { e.target.style.borderColor = "rgba(34,197,94,0.4)"; e.target.style.boxShadow = "0 0 0 3px rgba(34,197,94,0.08)"; }}
+                            onBlur={e => { e.target.style.borderColor = "rgba(255,255,255,0.06)"; e.target.style.boxShadow = "none"; }}
+                        />
 
-                        {isSignUp && (
-                            <div className="inp-wrapper" style={{ animation: "fadeUp 0.2s ease" }}>
-                                <span className="inp-icon">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                                    </svg>
-                                </span>
-                                <input id="confirm-pwd-inp" className="inp" type="password" placeholder="Confirm password" value={confirmPassword}
-                                    onChange={e => { setConfirmPassword(e.target.value); setError(""); }}
-                                    onKeyDown={e => e.key === "Enter" && handleEmailAuth()} />
+                        {error && (
+                            <div style={{
+                                background: "rgba(239, 68, 68, 0.08)",
+                                border: "1px solid rgba(239, 68, 68, 0.18)",
+                                borderRadius: 10,
+                                padding: "10px 14px",
+                                color: "#ef4444",
+                                fontSize: 12.5,
+                                lineHeight: 1.4
+                            }}>
+                                ⚠ {error}
                             </div>
                         )}
-                    </div>
 
-                    {!isSignUp && (
-                        <div style={{ ...fi(240), textAlign: "right", marginBottom: "16px" }}>
-                            <a href="#" style={{
-                                color: "#22c55e", fontSize: "12px", opacity: 0.8,
-                                transition: "opacity .2s"
-                            }}
-                                onMouseEnter={e => e.currentTarget.style.opacity = 1}
-                                onMouseLeave={e => e.currentTarget.style.opacity = 0.8}>
-                                Forgot password?
-                            </a>
-                        </div>
-                    )}
-
-                    {/* Error Banner */}
-                    {error && (
-                        <div style={{
-                            ...fi(0),
-                            background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)",
-                            borderRadius: "8px", padding: "10px 14px", marginBottom: "16px",
-                            display: "flex", alignItems: "center", gap: "8px",
-                            animation: "shake 0.3s ease"
-                        }}>
-                            <span style={{ color: "#ef4444", fontSize: "14px" }}>⚠</span>
-                            <span style={{ color: "#fca5a5", fontSize: "12.5px" }}>{error}</span>
-                        </div>
-                    )}
-
-                    {/* Submit Button */}
-                    <div style={{ ...fi(270), marginBottom: "20px" }}>
-                        <button className="p-btn" onClick={handleEmailAuth} disabled={loading}>
-                            {loading
-                                ? <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
-                                    <span className="spin" /> Please wait…
-                                  </span>
-                                : (isSignUp ? "Sign Up →" : "Sign In →")}
-                        </button>
-                    </div>
-
-                    <p style={{ ...fi(300), textAlign: "center", color: "#4b5563", fontSize: "13px" }}>
-                        {isSignUp ? "Already have an account? " : "Don't have an account? "}
                         <button 
-                            onClick={() => { setIsSignUp(!isSignUp); setError(""); }}
-                            style={{ background: "none", border: "none", color: "#22c55e", fontWeight: "600", cursor: "pointer", fontSize: "13px", padding: 0 }}
-                            onMouseEnter={e => e.currentTarget.style.textDecoration = "underline"}
-                            onMouseLeave={e => e.currentTarget.style.textDecoration = "none"}
+                            type="submit" 
+                            disabled={loading} 
+                            style={{ 
+                                width: "100%", 
+                                padding: "12px 16px", 
+                                fontSize: 13,
+                                fontWeight: 700,
+                                background: "#22c55e",
+                                color: "#030712",
+                                border: "none",
+                                borderRadius: 10,
+                                cursor: "pointer",
+                                transition: "all 0.15s ease",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                gap: 8,
+                                marginTop: 6
+                            }}
+                            onMouseEnter={e => { if (!loading) e.currentTarget.style.background = "#16a34a"; }}
+                            onMouseLeave={e => { if (!loading) e.currentTarget.style.background = "#22c55e"; }}
                         >
-                            {isSignUp ? "Sign In" : "Sign up free"}
+                            {loading ? (
+                                <>
+                                    <svg style={{ animation: "spin 0.8s linear infinite" }} width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                                        <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+                                    </svg>
+                                    {isSignUp ? "Creating Account…" : "Signing in…"}
+                                </>
+                            ) : (
+                                isSignUp ? "Create Account →" : "Sign In →"
+                            )}
                         </button>
+                    </form>
+
+                    <p style={{ marginTop: 24, textAlign: "center", fontSize: 12.5, color: "#6b7280" }}>
+                        {isSignUp ? "Already have an account? " : "Don't have an account? "}
+                        <span 
+                            onClick={() => setIsSignUp(!isSignUp)}
+                            style={{ color: "#22c55e", fontWeight: 600, cursor: "pointer", textDecoration: "underline" }}
+                        >
+                            {isSignUp ? "Sign In" : "Create one free"}
+                        </span>
                     </p>
                 </div>
 
-                <div style={{ fontSize: 11, color: "var(--text-faint)", textAlign: "center", marginTop: 24 }}>
-                    © {new Date().getFullYear()} Stock Analysis
+                <div style={{ fontSize: 11, color: "#4b5563", textAlign: "center", letterSpacing: "0.02em" }}>
+                    © {new Date().getFullYear()} Stock Analysis. All rights reserved.
                 </div>
             </div>
 
-            {/* ── Right: Visual SaaS Branding Panels (hidden on mobile) ── */}
+            {/* ── Right Side: SaaS Graphic Panel ── */}
             <div style={{
-                flex: 1, position: "relative",
-                background: "linear-gradient(140deg, #06080f 0%, #0a1525 45%, #060810 100%)",
-                display: "flex", alignItems: "center", justifyContent: "center",
+                flex: 1, 
+                position: "relative", 
                 overflow: "hidden",
-                borderLeft: "1px solid rgba(255,255,255,0.06)",
+                background: "linear-gradient(135deg, #090e1a 0%, #03050a 100%)",
+                display: "none",
+                flexDirection: "column",
+                justifyContent: "center",
+                padding: "0 64px"
             }} className="login-visual">
-                {/* Glow orbs */}
-                <div style={{ position: "absolute", top: "10%", right: "10%", width: "520px", height: "520px", background: "radial-gradient(circle, rgba(34,197,94,0.12) 0%, transparent 60%)", pointerEvents: "none" }} />
-                <div style={{ position: "absolute", bottom: "5%", left: "5%", width: "380px", height: "380px", background: "radial-gradient(circle, rgba(59,130,246,0.06) 0%, transparent 65%)", pointerEvents: "none" }} />
-                
-                {/* Grid Overlay */}
+                {/* Visual glows */}
                 <div style={{
-                    position: "absolute", inset: 0, opacity: 0.4,
-                    backgroundImage: "linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px)",
-                    backgroundSize: "52px 52px", pointerEvents: "none",
+                    position: "absolute", 
+                    top: "15%", 
+                    right: "10%",
+                    width: 500, 
+                    height: 500,
+                    background: "radial-gradient(circle, rgba(34,197,94,0.08) 0%, transparent 65%)",
+                    pointerEvents: "none"
+                }} />
+                <div style={{
+                    position: "absolute", 
+                    bottom: "10%", 
+                    left: "5%",
+                    width: 400, 
+                    height: 400,
+                    background: "radial-gradient(circle, rgba(59,130,246,0.05) 0%, transparent 60%)",
+                    pointerEvents: "none"
+                }} />
+                
+                {/* Dotted grid pattern overlay */}
+                <div style={{
+                    position: "absolute", 
+                    inset: 0, 
+                    opacity: 0.18,
+                    backgroundImage: "radial-gradient(rgba(255,255,255,0.12) 1px, transparent 1px)",
+                    backgroundSize: "24px 24px"
                 }} />
 
-                {/* Main Visual Panel Content */}
-                <div style={{ position: "relative", zIndex: 2, width: "100%", maxWidth: "520px", padding: "0 48px", ...fi(200) }}>
-                    <div style={{ marginBottom: "36px" }}>
-                        <div style={{
-                            display: "inline-flex", alignItems: "center", gap: "6px",
-                            background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.15)",
-                            borderRadius: "20px", padding: "4px 12px", marginBottom: "18px",
-                        }}>
-                            <span style={{ color: "#22c55e", fontSize: "11px", fontWeight: "600", letterSpacing: "0.06em" }}>▲ MARKETS LIVE</span>
-                        </div>
-                        <h2 style={{ fontSize: "36px", fontWeight: "800", letterSpacing: "-1.5px", lineHeight: "1.12", marginBottom: "12px" }}>
-                            Real-time Market<br />
-                            <span style={{ color: "#22c55e" }}>Intelligence</span>
-                        </h2>
-                        <p style={{ color: "#6b7280", fontSize: "14px", lineHeight: "1.7" }}>
-                            AI-powered signals · Live technical indicators · Smart alerts for NSE & BSE
-                        </p>
-                    </div>
-
-                    {/* Floating chart widget */}
-                    <div className="float" style={{
-                        background: "rgba(10,14,26,0.85)", backdropFilter: "blur(24px)",
-                        border: "1px solid rgba(255,255,255,0.08)", borderRadius: "18px",
-                        padding: "22px 22px 16px",
-                        boxShadow: "0 32px 80px rgba(0,0,0,0.55)",
-                        marginBottom: "14px",
-                    }}>
+                <div style={{ position: "relative", zIndex: 2, maxWidth: 460 }}>
+                    <div style={{ marginBottom: 32 }}>
                         <LiveChart />
                     </div>
 
-                    {/* Stock marquee ticker */}
-                    <div style={{
-                        background: "rgba(10,14,26,0.6)", border: "1px solid rgba(255,255,255,0.06)",
-                        borderRadius: "10px", padding: "9px 14px", overflow: "hidden", marginBottom: "14px",
+                    <h2 style={{ 
+                        fontSize: 32, 
+                        fontWeight: 800, 
+                        letterSpacing: "-0.8px", 
+                        lineHeight: 1.25, 
+                        marginBottom: 16,
+                        color: "#f3f4f6"
                     }}>
-                        <div className="tkr">
-                            {[
-                                { s: "TCS", p: "3,512", c: -0.67 }, { s: "INFY", p: "1,624", c: 2.31 },
-                                { s: "HDFC", p: "1,721", c: -1.12 }, { s: "WIPRO", p: "498", c: 0.42 },
-                                { s: "NIFTY 50", p: "24,812", c: 0.85 }, { s: "SENSEX", p: "81,543", c: 0.72 },
-                                { s: "TCS", p: "3,512", c: -0.67 }, { s: "INFY", p: "1,624", c: 2.31 },
-                                { s: "HDFC", p: "1,721", c: -1.12 }, { s: "WIPRO", p: "498", c: 0.42 },
-                                { s: "NIFTY 50", p: "24,812", c: 0.85 }, { s: "SENSEX", p: "81,543", c: 0.72 },
-                            ].map((t, i) => (
-                                <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px", paddingRight: "24px" }}>
-                                    <span style={{ color: "#6b7280", fontWeight: "600" }}>{t.s}</span>
-                                    <span style={{ color: "white" }}>₹{t.p}</span>
-                                    <span style={{ color: t.c >= 0 ? "#22c55e" : "#ef4444", fontWeight: "700" }}>
-                                        {t.c >= 0 ? "+" : ""}{t.c}%
-                                    </span>
-                                    <span style={{ color: "#1f2937" }}>|</span>
-                                </span>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Stats metrics */}
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px" }}>
-                        {[
-                            { label: "Stocks Tracked", value: "2,400+" },
-                            { label: "AI Signals / Day", value: "18K+" },
-                            { label: "Active Users", value: "42K+" },
-                        ].map(({ label, value }) => (
-                            <div key={label} style={{
-                                background: "rgba(10,14,26,0.6)", border: "1px solid rgba(255,255,255,0.06)",
-                                borderRadius: "10px", padding: "12px", textAlign: "center",
-                            }}>
-                                <div style={{ color: "white", fontWeight: "700", fontSize: "16px" }}>{value}</div>
-                                <div style={{ color: "#4b5563", fontSize: "11px", marginTop: "2px" }}>{label}</div>
-                            </div>
-                        ))}
-                    </div>
+                        Real-time market <br />
+                        <span style={{ 
+                            background: "linear-gradient(90deg, #22c55e 0%, #4ade80 100%)", 
+                            WebkitBackgroundClip: "text", 
+                            WebkitTextFillColor: "transparent" 
+                        }}>
+                            intelligence
+                        </span>
+                    </h2>
+                    
+                    <p style={{ 
+                        color: "#9ca3af", 
+                        fontSize: 14.5, 
+                        lineHeight: 1.6, 
+                        margin: 0 
+                    }}>
+                        Unlock AI-powered trading signals, technical indicator mapping, and automated portfolio crash alerts in one unified workspace.
+                    </p>
                 </div>
             </div>
 
             <style>{`
-                .login-visual { display: none; }
                 @media (min-width: 980px) {
                     .login-visual { display: flex !important; }
+                }
+                @keyframes spin {
+                    from { transform: rotate(0deg); }
+                    to { transform: rotate(360deg); }
                 }
             `}</style>
         </div>
@@ -510,11 +509,11 @@ export default function Login() {
 
 function GoogleIcon() {
     return (
-        <svg width="18" height="18" viewBox="0 0 48 48" style={{ flexShrink: 0 }}>
-            <path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3l5.7-5.7C34 6 29.3 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.7-.4-3.9z" />
-            <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3l5.7-5.7C34 6 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z" />
-            <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z" />
-            <path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3a12 12 0 0 1-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.7-.4-3.9z" />
+        <svg width="16" height="16" viewBox="0 0 48 48" style={{ display: "block" }}>
+            <path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303C33.654 32.657 29.332 36 24 36c-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.7-.4-3.9z" />
+            <path fill="#FF3D00" d="M6.306 14.691l6.571 4.819C14.655 15.108 19.001 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.3 4 9.7 8.3 6.3 14.7z" />
+            <path fill="#4CAF50" d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238C29.211 35.091 26.715 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z" />
+            <path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.3a12 12 0 0 1-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.7-.4-3.9z" />
         </svg>
     );
 }
