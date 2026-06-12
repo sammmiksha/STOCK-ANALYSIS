@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { auth } from "../firebase";
+import { auth, db } from "../firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 
 const API_BASE = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
     ? "http://localhost:8000"
@@ -141,8 +142,22 @@ export default function Profile() {
     const fetchWatchlist = async (uid) => {
         try {
             setWatchlistLoading(true);
-            const res = await axios.get(`${API_BASE}/watchlist?user=${uid}`);
-            setWatchlist(res.data.symbols || []);
+            let loadedFromFirestore = false;
+            try {
+                const docRef = doc(db, "watchlists", uid);
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists()) {
+                    setWatchlist(docSnap.data().symbols || []);
+                    loadedFromFirestore = true;
+                }
+            } catch (err) {
+                console.warn("Firestore fetchWatchlist in profile failed, trying backend fallback:", err);
+            }
+            
+            if (!loadedFromFirestore) {
+                const res = await axios.get(`${API_BASE}/watchlist?user=${uid}`);
+                setWatchlist(res.data.symbols || []);
+            }
         } catch (err) {
             console.error("Failed to fetch watchlist in profile:", err);
         } finally {
@@ -153,8 +168,22 @@ export default function Profile() {
     const fetchAlerts = async (uid) => {
         try {
             setAlertsLoading(true);
-            const res = await axios.get(`${API_BASE}/alerts?user=${uid}`);
-            setAlerts(res.data.alerts || []);
+            let loadedFromFirestore = false;
+            try {
+                const docRef = doc(db, "alerts", uid);
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists()) {
+                    setAlerts(docSnap.data().alerts || []);
+                    loadedFromFirestore = true;
+                }
+            } catch (err) {
+                console.warn("Firestore fetchAlerts in profile failed, trying backend fallback:", err);
+            }
+            
+            if (!loadedFromFirestore) {
+                const res = await axios.get(`${API_BASE}/alerts?user=${uid}`);
+                setAlerts(res.data.alerts || []);
+            }
         } catch (err) {
             console.error("Failed to fetch alerts in profile:", err);
         } finally {
@@ -164,12 +193,21 @@ export default function Profile() {
 
     const handleRemoveWatchlist = async (sym) => {
         if (!user?.uid) return;
+        const updatedSymbols = watchlist.filter(s => s !== sym);
+        setWatchlist(updatedSymbols);
+        
         try {
-            const res = await axios.post(`${API_BASE}/watchlist/remove`, {
+            const docRef = doc(db, "watchlists", user.uid);
+            await setDoc(docRef, { symbols: updatedSymbols }, { merge: true });
+        } catch (err) {
+            console.warn("Firestore watchlist remove in profile failed:", err);
+        }
+        
+        try {
+            await axios.post(`${API_BASE}/watchlist/remove`, {
                 user: user.uid,
                 symbol: sym
             });
-            setWatchlist(res.data.symbols || []);
         } catch (err) {
             console.error("Failed to remove watchlist item:", err);
         }
@@ -177,12 +215,21 @@ export default function Profile() {
 
     const handleRemoveAlert = async (sym) => {
         if (!user?.uid) return;
+        const updatedAlerts = alerts.filter(a => a.symbol !== sym);
+        setAlerts(updatedAlerts);
+        
         try {
-            const res = await axios.post(`${API_BASE}/alerts/remove`, {
+            const docRef = doc(db, "alerts", user.uid);
+            await setDoc(docRef, { alerts: updatedAlerts }, { merge: true });
+        } catch (err) {
+            console.warn("Firestore alerts remove in profile failed:", err);
+        }
+        
+        try {
+            await axios.post(`${API_BASE}/alerts/remove`, {
                 user: user.uid,
                 symbol: sym
             });
-            setAlerts(res.data.alerts || []);
         } catch (err) {
             console.error("Failed to remove alert:", err);
         }
